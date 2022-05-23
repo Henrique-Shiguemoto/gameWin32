@@ -8,5 +8,5 @@
 #define WINDOW_POSITION_Y       100
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);
-DWORD CreateMainWindow(const char* windowTitle, int width, int height, int windowX, int windowY);
-
+HWND CreateMainWindow(const char* windowTitle, int width, int height, int windowX, int windowY);
+BOOL GameIsRunning(void);

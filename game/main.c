@@ -3,27 +3,44 @@
 
 #include "main.h"
 
+BOOL g_GameIsRunning = FALSE;
+
 int WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int windowFlags)
 {
+    int return_value = EXIT_SUCCESS;
+
     UNREFERENCED_PARAMETER(currentInstanceHandle);
     UNREFERENCED_PARAMETER(previousInstanceHandle);
     UNREFERENCED_PARAMETER(commandLine);
     UNREFERENCED_PARAMETER(windowFlags);
 
-    DWORD window = CreateMainWindow(GAME_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_POSITION_X, WINDOW_POSITION_Y);
-    if (window == EXIT_FAILURE) {
+    if (GameIsRunning() == TRUE) {
+        MessageBoxA(NULL, "Another instance of this program is already running...", "Error!", MB_ICONEXCLAMATION | MB_OK);
+        return_value = EXIT_FAILURE;
         goto Exit;
     }
 
+    HWND windowHandle = CreateMainWindow(GAME_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_POSITION_X, WINDOW_POSITION_Y);
+    if (windowHandle == NULL) {
+        return_value = EXIT_FAILURE;
+        goto Exit;
+    }
+
+    g_GameIsRunning = TRUE;
+
     MSG message = { 0 };
-    while (GetMessageA(&message, NULL, 0, 0) > 0)
-    {
-        TranslateMessage(&message);
-        DispatchMessageA(&message);
+
+    while (g_GameIsRunning == TRUE) {
+        while (PeekMessageA(&message, windowHandle, 0, 0, PM_REMOVE)) {
+            DispatchMessageA(&message);
+        }
+        //Process input
+
+        //Render frame
     }
 
 Exit:
-    exit(EXIT_SUCCESS);
+    exit(return_value);
 }
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter)
@@ -34,12 +51,15 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
     {
         case WM_CLOSE:
         {
+            OutputDebugStringA("WM_CLOSE\n");
+            g_GameIsRunning = FALSE;
             PostQuitMessage(0);
             break;
         }
 
         default:
         {
+            OutputDebugStringA("DEFAULT\n");
             result = DefWindowProcA(windowHandle, messageID, wParameter, lParameter);
             break;
         }
@@ -47,9 +67,9 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
     return result;
 }
 
-DWORD CreateMainWindow(const char* windowTitle, int width, int height, int windowX, int windowY)
+HWND CreateMainWindow(const char* windowTitle, int width, int height, int windowX, int windowY)
 {
-    DWORD result = EXIT_SUCCESS;
+    HWND resultHandle = NULL;
 
     //Window Class creation and registration
     WNDCLASSEXA windowClass = { 0 };
@@ -67,23 +87,31 @@ DWORD CreateMainWindow(const char* windowTitle, int width, int height, int windo
 
     //Window Registration
     if (!RegisterClassExA(&windowClass)) {
-        result = GetLastError();
         MessageBoxA(NULL, "Error while registering the window class...", "Error!", MB_ICONEXCLAMATION | MB_OK);
         goto Exit;
     }
 
     //Creating first Window Class Handle
-    HWND windowHandle = CreateWindowExA(0, windowClass.lpszClassName, windowTitle, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+    resultHandle = CreateWindowExA(0, windowClass.lpszClassName, windowTitle, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                         windowX, windowY, width, height, NULL, NULL, windowClass.hInstance, NULL);
 
-    if (windowHandle == NULL)
+    if (resultHandle == NULL)
     {
-        result = GetLastError();
         MessageBoxA(NULL, "Error while creating the instance of the window class...", "Error!", MB_ICONEXCLAMATION | MB_OK);
         goto Exit;
     }
 
 Exit:
 
-    return result;
+    return resultHandle;
+}
+
+BOOL GameIsRunning(void) {
+    HANDLE mutex = NULL;
+    mutex = CreateMutexA(NULL, FALSE, GAME_NAME"_MUTEX");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        return TRUE;
+    }else{
+        return FALSE;
+    }
 }
