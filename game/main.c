@@ -2,64 +2,64 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>
-
 #include "main.h"
 
 BOOL g_GameIsRunning = FALSE;
-
 GAMEBITMAP g_GameBackbuffer = { 0 };
-
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
-    UNREFERENCED_PARAMETER(currentInstanceHandle);
-    UNREFERENCED_PARAMETER(previousInstanceHandle);
-    UNREFERENCED_PARAMETER(commandLine);
-    UNREFERENCED_PARAMETER(windowFlags);
+    int16_t returnValue = EXIT_SUCCESS;
 
-    int16_t return_value = EXIT_SUCCESS;
+    //This is so the sleep function doesn't sleep for too long because of how fast the Windows Scheduler is
+    uint32_t desiredTimeResolutionForScheduler = 1;
+    BOOL sleepIsGranular = (timeBeginPeriod(desiredTimeResolutionForScheduler) == TIMERR_NOERROR);
 
-    float timeElapsedInMicrosecondsPerFrameSum = 0;
-    float timeElapsedInMicrosecondsPerFrame = 0;
-    float timeElapsedInMilisecondsPerFrame = 0;
-
-    LARGE_INTEGER frameStart;
-    LARGE_INTEGER frameEnd;
-    LARGE_INTEGER fixedFrequency;
-
+    //Struct for window messages
     MSG message = { 0 };
 
+    //Verifying if another instance of this same program is already running (check set mutex)
     if (GameIsRunning() == TRUE) {
         MessageBoxA(NULL, "Another instance of this program is already running...", "Error!", MESSAGEBOX_ERROR_STYLE);
-        return_value = EXIT_FAILURE;
+        returnValue = EXIT_FAILURE;
         goto Exit;
     }
 
+    //Main window creation
     HWND windowHandle = CreateMainWindow(GAME_NAME, GAME_WIDTH, GAME_HEIGHT, GAME_POSITION_X, GAME_POSITION_Y);
     if (windowHandle == NULL) {
-        return_value = EXIT_FAILURE;
+        returnValue = EXIT_FAILURE;
         goto Exit;
     }
 
-    QueryPerformanceFrequency(&fixedFrequency);
-    g_PerformanceData.frequency = fixedFrequency.QuadPart;
+    //Getting the fixed clock frequency
+    g_PerformanceData.frequency = GetPerformanceFrequency();
 
-    //Global Initialization
+    //Setting the game to start running
     g_GameIsRunning = TRUE;
+
+    //Setting Debug info display toggle
+    g_PerformanceData.displayDebugInfo = FALSE;
+
+    //BackBuffer Initialization
     g_GameBackbuffer.bitMapInfo.bmiHeader.biSize = sizeof(g_GameBackbuffer.bitMapInfo.bmiHeader);
     g_GameBackbuffer.bitMapInfo.bmiHeader.biWidth = GAME_WIDTH;
     g_GameBackbuffer.bitMapInfo.bmiHeader.biHeight = GAME_HEIGHT;
     g_GameBackbuffer.bitMapInfo.bmiHeader.biBitCount = GAME_PIXEL_DEPTH;
     g_GameBackbuffer.bitMapInfo.bmiHeader.biCompression = BI_RGB;
     g_GameBackbuffer.bitMapInfo.bmiHeader.biPlanes = 1;
-    g_GameBackbuffer.Memory = VirtualAlloc(NULL, GAME_BACKBUFFER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
+    //Backbuffer Memory Allocation
+    g_GameBackbuffer.Memory = VirtualAlloc(NULL, GAME_BACKBUFFER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
     if (g_GameBackbuffer.Memory == NULL) {
-        return_value = EXIT_FAILURE;
+        returnValue = EXIT_FAILURE;
         goto Exit;
     }
 
-    QueryPerformanceCounter(&frameStart);
+    //Frame Processing
+    float timeElapsedInMicrosecondsPerFrame = 0;
+    int64_t start = GetPerformanceCounter();
 
     while (g_GameIsRunning == TRUE) {
         
@@ -69,30 +69,38 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         ProcessInput(windowHandle);
         RenderGraphics(windowHandle);
 
-        QueryPerformanceCounter(&frameEnd);
-        timeElapsedInMicrosecondsPerFrame = (float) (frameEnd.QuadPart - frameStart.QuadPart);
-        timeElapsedInMicrosecondsPerFrame = timeElapsedInMicrosecondsPerFrame * 1000000;
-        timeElapsedInMicrosecondsPerFrame = timeElapsedInMicrosecondsPerFrame / g_PerformanceData.frequency;
-        timeElapsedInMicrosecondsPerFrameSum += timeElapsedInMicrosecondsPerFrame;
-        timeElapsedInMilisecondsPerFrame = timeElapsedInMicrosecondsPerFrame / 1000;
 
-        g_PerformanceData.totalRawFramesRendered++;
-
-        if ((g_PerformanceData.totalRawFramesRendered % FRAMES_TO_CALC_AVERAGE) == 0) {
-            float averageMilisecondsPerFrame = (timeElapsedInMicrosecondsPerFrameSum / FRAMES_TO_CALC_AVERAGE) / 1000;
-
-            char aux_str[256];
-            _snprintf_s(aux_str, _countof(aux_str), _TRUNCATE, "%.3f ms (LAST FRAME) - %.3f ms (AVERAGE)\n", timeElapsedInMilisecondsPerFrame, averageMilisecondsPerFrame);
-            OutputDebugStringA(aux_str);
-
-            timeElapsedInMicrosecondsPerFrameSum = 0;
+        int64_t end = GetPerformanceCounter();
+        timeElapsedInMicrosecondsPerFrame = GetMicrosecondsElapsed(start, end);
+        
+        //Calculating RAW FPS every FRAME_INTERVAL frames
+        if ((g_PerformanceData.totalRawFramesRendered % FRAME_INTERVAL) == 0) {
+            g_PerformanceData.rawFPS = (uint32_t)(1 / (timeElapsedInMicrosecondsPerFrame / 1000000));
+        }
+        
+        //This while loop enforces the target FPS
+        while (timeElapsedInMicrosecondsPerFrame < TARGET_MICSECS_PER_FRAME) {
+            if (sleepIsGranular == TRUE) {
+                uint32_t milisecondsToSleep = (uint32_t)((TARGET_MICSECS_PER_FRAME - timeElapsedInMicrosecondsPerFrame) / 1000);
+                Sleep(milisecondsToSleep);
+            }
+            end = GetPerformanceCounter();
+            timeElapsedInMicrosecondsPerFrame = GetMicrosecondsElapsed(start, end);
         }
 
-        frameStart.QuadPart = frameEnd.QuadPart;
+        //Calculating VIRTUAL FPS every FRAME_INTERVAL frames
+        if ((g_PerformanceData.totalRawFramesRendered % FRAME_INTERVAL) == 0) {
+            g_PerformanceData.virtualFPS = (uint16_t)(1 / (timeElapsedInMicrosecondsPerFrame / 1000000));
+        }
+
+        g_PerformanceData.totalRawFramesRendered++;
+        start = end;
     }
 
 Exit:
-    exit(return_value);
+
+    timeEndPeriod(desiredTimeResolutionForScheduler);
+    return returnValue;
 }
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter)
@@ -175,7 +183,7 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
     }
 
     BOOL setWindowPosReturn = SetWindowPos(windowHandle, HWND_TOPMOST, g_PerformanceData.monitorInfo.rcMonitor.left, g_PerformanceData.monitorInfo.rcMonitor.top, 
-                                                                       g_PerformanceData.monitorWidth/2, g_PerformanceData.monitorHeight/2, SWP_FRAMECHANGED);
+                                                                       g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight, SWP_FRAMECHANGED);
     if (setWindowPosReturn == 0) {
         MessageBoxA(NULL, "Error while setting window position...", "Error!", MESSAGEBOX_ERROR_STYLE);
         
@@ -200,23 +208,29 @@ BOOL GameIsRunning(void) {
 }
 
 void ProcessInput(HWND windowHandle) {
-    int16_t escKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
+    int16_t closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
+    int16_t debugKeyIsDown = GetAsyncKeyState(VK_TAB);
 
-    if (escKeyIsDown) {
+    static BOOL debugKeyWasDown;
+
+    if (closeKeyIsDown) {
         SendMessageA(windowHandle, WM_CLOSE, 0, 0);
     }
+    if (debugKeyIsDown && !debugKeyWasDown) {
+        g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
+    }
+
+    debugKeyWasDown = debugKeyIsDown;
 }
 
 void RenderGraphics(HWND windowHandle) {
-
-    PIXEL p = InitializePixel(0x00, 0x00, 0x00, 0x00);
-    
-    for (size_t i = 0; i < (GAME_WIDTH * GAME_HEIGHT); i++)
-    {
-        memcpy_s((PIXEL*) g_GameBackbuffer.Memory + i, GAME_BACKBUFFER_SIZE /2, &p, sizeof(PIXEL));
-    }
-
     HDC deviceContext = GetDC(windowHandle);
+
+    PIXEL pixel = InitializePixel(0x00, 0xff, 0x00, 0x00);
+    for (int i = 0; i < GAME_WIDTH * GAME_HEIGHT; i++)
+    {
+        memcpy((PIXEL*) g_GameBackbuffer.Memory + i, &pixel, sizeof(PIXEL));
+    }
 
     int32_t stretchDIBitsReturn = StretchDIBits(deviceContext, 0, 0, g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight,
                                                                0, 0, GAME_WIDTH, GAME_HEIGHT,
@@ -224,6 +238,20 @@ void RenderGraphics(HWND windowHandle) {
     if (stretchDIBitsReturn == 0) {
         MessageBoxA(NULL, "Error while stretching the backbuffer to the monitor...", "Error!", MESSAGEBOX_ERROR_STYLE);
         goto Exit;
+    }
+
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+
+        //Selecting font for debugging
+        SelectObject(deviceContext, (HFONT)GetStockObject(ANSI_FIXED_FONT));
+
+        //Render FPS data
+        char fpsRawString[32];
+        sprintf_s(fpsRawString, _countof(fpsRawString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
+
+        sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
     }
 
 Exit: 
@@ -234,10 +262,34 @@ Exit:
 PIXEL InitializePixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
     PIXEL pixel = { 0 };
 
-    pixel.red = red;
-    pixel.green = green;
-    pixel.blue = blue;
+    pixel.color.red = red;
+    pixel.color.green = green;
+    pixel.color.blue = blue;
     pixel.alpha = alpha;
     
     return pixel;
+}
+
+float GetMicrosecondsElapsed(int64_t start, int64_t end) {
+    return (float) ((end-start) * 1000000) / g_PerformanceData.frequency;
+}
+
+float GetMilisecondsElapsed(int64_t start, int64_t end) {
+    return GetMicrosecondsElapsed(start, end) / 1000;
+}
+
+float GetSecondsElapsed(int64_t start, int64_t end) {
+    return GetMilisecondsElapsed(start, end) / 1000;
+}
+
+int64_t GetPerformanceCounter(void) {
+    LARGE_INTEGER result;
+    QueryPerformanceCounter(&result);
+    return result.QuadPart;
+}
+
+int64_t GetPerformanceFrequency(void) {
+    LARGE_INTEGER result;
+    QueryPerformanceFrequency(&result);
+    return result.QuadPart;
 }

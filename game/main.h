@@ -10,7 +10,9 @@
 #define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * (GAME_PIXEL_DEPTH / 8))		//In bytes
 #define BYTES_PER_PIXEL				(GAME_PIXEL_DEPTH / 8)
 
-#define FRAMES_TO_CALC_AVERAGE		100
+#define TARGET_MICSECS_PER_FRAME	16667
+#define TARGET_MILSECS_PER_FRAME	TARGET_MICSECS_PER_FRAME / 1000
+#define FRAME_INTERVAL				50
 
 #define MESSAGEBOX_ERROR_STYLE		(MB_ICONEXCLAMATION | MB_OK)
 
@@ -32,20 +34,26 @@ typedef struct GAME_PERFORMANCE_DATA {
 	
 	uint64_t totalRawFramesRendered;				//Total of actual frames rendered
 
-	uint32_t rawFPSAverage;							//Actual FPS
-	uint16_t virtualFPSAverage;						//FPS perceived by the player
+	uint32_t rawFPS;								//Actual FPS
+	uint16_t virtualFPS;							//FPS perceived by the player
 
 	MONITORINFO monitorInfo;						//Information about the player's monitor
 
 	int32_t monitorWidth;							//Player's monitor width
 	int32_t monitorHeight;							//Player's monitor height
 
+	BOOL displayDebugInfo;							//Toggle for displaying debug info into the screen
+
 } GAME_PERFORMANCE_DATA;
 
-typedef struct PIXEL {
+typedef struct COLOR {
 	uint8_t blue;
 	uint8_t green;
 	uint8_t red;
+} COLOR;
+
+typedef struct PIXEL {
+	COLOR color;
 	uint8_t alpha;
 } PIXEL;
 
@@ -67,3 +75,8 @@ BOOL GameIsRunning(void);																										//Function to prevent multipl
 void ProcessInput(HWND windowHandle);
 void RenderGraphics(HWND windowHandle);
 PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
+float GetMicrosecondsElapsed(int64_t start, int64_t end);
+float GetMilisecondsElapsed(int64_t start, int64_t end);
+float GetSecondsElapsed(int64_t start, int64_t end);
+int64_t GetPerformanceCounter(void);
+int64_t GetPerformanceFrequency(void);
