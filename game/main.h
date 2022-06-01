@@ -27,6 +27,7 @@
 typedef struct GAMEBITMAP {
 	BITMAPINFO bitMapInfo;							
 	void* Memory;									//Actual memory buffer (although it's a void pointer, we're interpreting this a pixel buffer)
+	int32_t pitch;
 } GAMEBITMAP;
 
 typedef struct GAME_PERFORMANCE_DATA {
@@ -57,6 +58,14 @@ typedef struct PIXEL {
 	uint8_t alpha;
 } PIXEL;
 
+typedef struct PLAYER {
+	COLOR color;
+	int32_t positionX;								//Measured in pixels (in relation to the game resolution, not the monitor) 
+	int32_t positionY;								//Measured in pixels (in relation to the game resolution, not the monitor)
+	int32_t width;									//Measured in pixels (in relation to the game resolution, not the monitor)
+	int32_t height;									//Measured in pixels (in relation to the game resolution, not the monitor)	
+} PLAYER;
+
 /// <summary>
 /// 
 ///	These are the declarations of custom functions I used
@@ -80,3 +89,4 @@ float GetMilisecondsElapsed(int64_t start, int64_t end);
 float GetSecondsElapsed(int64_t start, int64_t end);
 int64_t GetPerformanceCounter(void);
 int64_t GetPerformanceFrequency(void);
+void DrawRectangle(int minX, int minY, int maxX, int maxY, COLOR color);

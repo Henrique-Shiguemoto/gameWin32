@@ -7,6 +7,7 @@
 BOOL g_GameIsRunning = FALSE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
+PLAYER g_MainPlayer = { 0 };
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -41,6 +42,14 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
     //Setting Debug info display toggle
     g_PerformanceData.displayDebugInfo = FALSE;
+
+    //Main Player Initialization
+    COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F};
+    g_MainPlayer.color = playerColor;
+    g_MainPlayer.positionX = GAME_WIDTH / 2;
+    g_MainPlayer.positionY = GAME_HEIGHT / 2;
+    g_MainPlayer.width = 20;
+    g_MainPlayer.height = 20;
 
     //BackBuffer Initialization
     g_GameBackbuffer.bitMapInfo.bmiHeader.biSize = sizeof(g_GameBackbuffer.bitMapInfo.bmiHeader);
@@ -172,6 +181,7 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
 
     g_PerformanceData.monitorWidth = g_PerformanceData.monitorInfo.rcMonitor.right - g_PerformanceData.monitorInfo.rcMonitor.left;
     g_PerformanceData.monitorHeight = g_PerformanceData.monitorInfo.rcMonitor.bottom - g_PerformanceData.monitorInfo.rcMonitor.top;
+    g_GameBackbuffer.pitch = GAME_WIDTH * BYTES_PER_PIXEL;
 
     LONG_PTR pointerReturned = SetWindowLongPtrA(windowHandle, GWL_STYLE, (WS_OVERLAPPEDWINDOW | WS_VISIBLE) & ~WS_OVERLAPPEDWINDOW);
     if (pointerReturned == 0) {
@@ -182,7 +192,7 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
         goto Exit;
     }
 
-    BOOL setWindowPosReturn = SetWindowPos(windowHandle, HWND_TOPMOST, g_PerformanceData.monitorInfo.rcMonitor.left, g_PerformanceData.monitorInfo.rcMonitor.top, 
+    BOOL setWindowPosReturn = SetWindowPos(windowHandle, HWND_TOP, g_PerformanceData.monitorInfo.rcMonitor.left, g_PerformanceData.monitorInfo.rcMonitor.top, 
                                                                        g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight, SWP_FRAMECHANGED);
     if (setWindowPosReturn == 0) {
         MessageBoxA(NULL, "Error while setting window position...", "Error!", MESSAGEBOX_ERROR_STYLE);
@@ -226,12 +236,17 @@ void ProcessInput(HWND windowHandle) {
 void RenderGraphics(HWND windowHandle) {
     HDC deviceContext = GetDC(windowHandle);
 
-    PIXEL pixel = InitializePixel(0x00, 0xff, 0x00, 0x00);
+    //Drawing background
+    PIXEL pixel = InitializePixel(0x00, 0x00, 0x4f, 0x00);
     for (int i = 0; i < GAME_WIDTH * GAME_HEIGHT; i++)
     {
         memcpy((PIXEL*) g_GameBackbuffer.Memory + i, &pixel, sizeof(PIXEL));
     }
 
+    DrawRectangle(g_MainPlayer.positionX - g_MainPlayer.width/2, g_MainPlayer.positionY - g_MainPlayer.height / 2,
+                  g_MainPlayer.width, g_MainPlayer.height, g_MainPlayer.color);
+
+    //Backbuffer Streching
     int32_t stretchDIBitsReturn = StretchDIBits(deviceContext, 0, 0, g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight,
                                                                0, 0, GAME_WIDTH, GAME_HEIGHT,
                                                                g_GameBackbuffer.Memory, &g_GameBackbuffer.bitMapInfo, DIB_RGB_COLORS, SRCCOPY);
@@ -292,4 +307,38 @@ int64_t GetPerformanceFrequency(void) {
     LARGE_INTEGER result;
     QueryPerformanceFrequency(&result);
     return result.QuadPart;
+}
+
+void DrawRectangle(int minX, int minY, int width, int height, COLOR color) {
+    //Bounds checking
+    if (minX < 0)
+    {
+        minX = 0;
+    }
+    if (minY < 0)
+    {
+        minY = 0;
+    }
+    if (minX + width > GAME_WIDTH)
+    {
+        width = GAME_WIDTH - minX;
+    }
+    if (minY + height > GAME_HEIGHT)
+    {
+        height = GAME_HEIGHT - minY;
+    }
+
+    //Calculating the beginning of the memory from the backbuffer to draw to
+    PIXEL* startingPixel = (PIXEL*) g_GameBackbuffer.Memory + (GAME_WIDTH * minY) + minX;
+
+    PIXEL pixel = InitializePixel(color.red, color.green, color.blue, 0xFF);
+
+    //Drawing by setting bytes in the backbuffer's memory
+    for (int32_t y = 0; y < height; y++)
+    {
+        for (int32_t x = 0; x < width; x++)
+        {
+            memcpy_s(startingPixel + x + (y * GAME_WIDTH), sizeof(PIXEL), &pixel, sizeof(PIXEL));
+        }
+    }
 }
