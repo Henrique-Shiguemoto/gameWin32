@@ -10,9 +10,10 @@
 #define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * (GAME_PIXEL_DEPTH / 8))		//In bytes
 #define BYTES_PER_PIXEL				(GAME_PIXEL_DEPTH / 8)
 
-#define TARGET_MICSECS_PER_FRAME	16667
-#define TARGET_MILSECS_PER_FRAME	TARGET_MICSECS_PER_FRAME / 1000
-#define FRAME_INTERVAL				50
+#define TARGET_MICSECS_FOR_60_FPS	16667
+#define TARGET_MICSECS_FOR_30_FPS	33333
+
+#define FRAME_INTERVAL				25														//For debugging display only really
 
 #define MESSAGEBOX_ERROR_STYLE		(MB_ICONEXCLAMATION | MB_OK)
 
@@ -44,7 +45,6 @@ typedef struct GAME_PERFORMANCE_DATA {
 	int32_t monitorHeight;							//Player's monitor height
 
 	BOOL displayDebugInfo;							//Toggle for displaying debug info into the screen
-
 } GAME_PERFORMANCE_DATA;
 
 typedef struct COLOR {
@@ -53,6 +53,7 @@ typedef struct COLOR {
 	uint8_t red;
 } COLOR;
 
+//Not recommended to add or take stuff from here, because we're using pointer conversions (PIXEL*)
 typedef struct PIXEL {
 	COLOR color;
 	uint8_t alpha;
@@ -60,10 +61,10 @@ typedef struct PIXEL {
 
 typedef struct PLAYER {
 	COLOR color;
-	int32_t positionX;								//Measured in pixels (in relation to the game resolution, not the monitor) 
-	int32_t positionY;								//Measured in pixels (in relation to the game resolution, not the monitor)
-	int32_t width;									//Measured in pixels (in relation to the game resolution, not the monitor)
-	int32_t height;									//Measured in pixels (in relation to the game resolution, not the monitor)	
+	float positionX;
+	float positionY;
+	float width;
+	float height;
 } PLAYER;
 
 /// <summary>
@@ -89,4 +90,6 @@ float GetMilisecondsElapsed(int64_t start, int64_t end);
 float GetSecondsElapsed(int64_t start, int64_t end);
 int64_t GetPerformanceCounter(void);
 int64_t GetPerformanceFrequency(void);
-void DrawRectangle(int minX, int minY, int maxX, int maxY, COLOR color);
+void DrawBackground(COLOR color);
+void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color);
+int32_t RoundFloorToInt32(float number);

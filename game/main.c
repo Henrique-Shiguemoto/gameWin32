@@ -2,6 +2,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>
+#include<emmintrin.h>
+
 #include "main.h"
 
 BOOL g_GameIsRunning = FALSE;
@@ -41,15 +43,15 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     g_GameIsRunning = TRUE;
 
     //Setting Debug info display toggle
-    g_PerformanceData.displayDebugInfo = FALSE;
+    g_PerformanceData.displayDebugInfo = TRUE;
 
     //Main Player Initialization
     COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F};
     g_MainPlayer.color = playerColor;
     g_MainPlayer.positionX = GAME_WIDTH / 2;
     g_MainPlayer.positionY = GAME_HEIGHT / 2;
-    g_MainPlayer.width = 20;
-    g_MainPlayer.height = 20;
+    g_MainPlayer.width = 8;
+    g_MainPlayer.height = 8;
 
     //BackBuffer Initialization
     g_GameBackbuffer.bitMapInfo.bmiHeader.biSize = sizeof(g_GameBackbuffer.bitMapInfo.bmiHeader);
@@ -88,9 +90,9 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         }
         
         //This while loop enforces the target FPS
-        while (timeElapsedInMicrosecondsPerFrame < TARGET_MICSECS_PER_FRAME) {
+        while (timeElapsedInMicrosecondsPerFrame < TARGET_MICSECS_FOR_60_FPS) {
             if (sleepIsGranular == TRUE) {
-                uint32_t milisecondsToSleep = (uint32_t)((TARGET_MICSECS_PER_FRAME - timeElapsedInMicrosecondsPerFrame) / 1000);
+                uint32_t milisecondsToSleep = (uint32_t)((TARGET_MICSECS_FOR_60_FPS - timeElapsedInMicrosecondsPerFrame) / 1000);
                 Sleep(milisecondsToSleep);
             }
             end = GetPerformanceCounter();
@@ -202,6 +204,9 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
         goto Exit;
     }
 
+    //I wanna hide our cursor for the game
+    ShowCursor(FALSE);
+
 Exit:
 
     return windowHandle;
@@ -223,6 +228,13 @@ void ProcessInput(HWND windowHandle) {
 
     static BOOL debugKeyWasDown;
 
+    POINT mousePosition = { 0 };
+    GetCursorPos(&mousePosition);
+    ScreenToClient(windowHandle, &mousePosition);
+
+    float widthRatio = ((float) GAME_WIDTH / (float) g_PerformanceData.monitorWidth);
+    float heightRatio = ((float) GAME_HEIGHT / (float) g_PerformanceData.monitorHeight);
+
     if (closeKeyIsDown) {
         SendMessageA(windowHandle, WM_CLOSE, 0, 0);
     }
@@ -230,18 +242,17 @@ void ProcessInput(HWND windowHandle) {
         g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
     }
 
+    g_MainPlayer.positionX = mousePosition.x * widthRatio;
+    g_MainPlayer.positionY = mousePosition.y * heightRatio;
+    
     debugKeyWasDown = debugKeyIsDown;
 }
 
 void RenderGraphics(HWND windowHandle) {
     HDC deviceContext = GetDC(windowHandle);
 
-    //Drawing background
-    PIXEL pixel = InitializePixel(0x00, 0x00, 0x4f, 0x00);
-    for (int i = 0; i < GAME_WIDTH * GAME_HEIGHT; i++)
-    {
-        memcpy((PIXEL*) g_GameBackbuffer.Memory + i, &pixel, sizeof(PIXEL));
-    }
+    COLOR c1 = {.red = 0x1f, .green = 0x00, .blue = 0x49};
+    DrawBackground(c1);
 
     DrawRectangle(g_MainPlayer.positionX - g_MainPlayer.width/2, g_MainPlayer.positionY - g_MainPlayer.height / 2,
                   g_MainPlayer.width, g_MainPlayer.height, g_MainPlayer.color);
@@ -261,12 +272,16 @@ void RenderGraphics(HWND windowHandle) {
         SelectObject(deviceContext, (HFONT)GetStockObject(ANSI_FIXED_FONT));
 
         //Render FPS data
-        char fpsRawString[32];
+        char fpsRawString[256];
         sprintf_s(fpsRawString, _countof(fpsRawString), "RAW FPS: %u", g_PerformanceData.rawFPS);
         TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
 
         sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
+
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%f, %f)", g_MainPlayer.positionX, g_MainPlayer.positionY);
+        TextOutA(deviceContext, 0, 26, fpsRawString, (int)strlen(fpsRawString));
+
     }
 
 Exit: 
@@ -309,7 +324,26 @@ int64_t GetPerformanceFrequency(void) {
     return result.QuadPart;
 }
 
-void DrawRectangle(int minX, int minY, int width, int height, COLOR color) {
+void DrawBackground(COLOR color) {
+    //Drawing background with SSE2 instruction
+    __m128i quadPixel = { color.blue, color.green, color.red, 0x00, 
+                          color.blue, color.green, color.red, 0x00, 
+                          color.blue, color.green, color.red, 0x00,
+                          color.blue, color.green, color.red, 0x00 };
+
+    for (int i = 0; i < (GAME_WIDTH * GAME_HEIGHT) / 4; i++)
+    {
+        _mm_store_si128((__m128i*) g_GameBackbuffer.Memory + i, quadPixel);
+    }
+}
+
+void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color) {
+    
+    int32_t minX = RoundFloorToInt32(inMinX);
+    int32_t minY = RoundFloorToInt32(inMinY);
+    int32_t width = RoundFloorToInt32(inWidth);
+    int32_t height = RoundFloorToInt32(inHeight);
+    
     //Bounds checking
     if (minX < 0)
     {
@@ -329,7 +363,7 @@ void DrawRectangle(int minX, int minY, int width, int height, COLOR color) {
     }
 
     //Calculating the beginning of the memory from the backbuffer to draw to
-    PIXEL* startingPixel = (PIXEL*) g_GameBackbuffer.Memory + (GAME_WIDTH * minY) + minX;
+    PIXEL* startingPixel = (PIXEL*) g_GameBackbuffer.Memory + (((GAME_WIDTH * GAME_HEIGHT) - GAME_WIDTH) - (GAME_WIDTH * minY) + minX);
 
     PIXEL pixel = InitializePixel(color.red, color.green, color.blue, 0xFF);
 
@@ -338,7 +372,12 @@ void DrawRectangle(int minX, int minY, int width, int height, COLOR color) {
     {
         for (int32_t x = 0; x < width; x++)
         {
-            memcpy_s(startingPixel + x + (y * GAME_WIDTH), sizeof(PIXEL), &pixel, sizeof(PIXEL));
+            memcpy_s(startingPixel + x - (y * GAME_WIDTH), sizeof(PIXEL), &pixel, sizeof(PIXEL));
         }
     }
+}
+
+int32_t RoundFloorToInt32(float number) {
+    int32_t result = (int32_t)(number + 0.5f);
+    return result;
 }
