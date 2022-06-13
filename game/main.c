@@ -2,14 +2,17 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>
+#include<psapi.h>
 #include<emmintrin.h>
 
 #include "main.h"
 
 BOOL g_GameIsRunning = FALSE;
+BOOL g_GameIsFocused = TRUE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
+ENEMY g_Enemies[10] = {0};
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -17,7 +20,11 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
     //This is so the sleep function doesn't sleep for too long because of how fast the Windows Scheduler is
     uint32_t desiredTimeResolutionForScheduler = 1;
-    BOOL sleepIsGranular = (timeBeginPeriod(desiredTimeResolutionForScheduler) == TIMERR_NOERROR);
+    MMRESULT timeBeginPeriodReturn = timeBeginPeriod(desiredTimeResolutionForScheduler);
+    if (timeBeginPeriodReturn == TIMERR_NOCANDO) {
+        returnValue = EXIT_FAILURE;
+        goto Exit;
+    }
 
     //Struct for window messages
     MSG message = { 0 };
@@ -42,16 +49,12 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     //Setting the game to start running
     g_GameIsRunning = TRUE;
 
-    //Setting Debug info display toggle
-    g_PerformanceData.displayDebugInfo = TRUE;
+    //MainPlayer and Enemies Initialization
+    InitializeMainPlayer();
+    InitializeEnemies();
 
-    //Main Player Initialization
-    COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F};
-    g_MainPlayer.color = playerColor;
-    g_MainPlayer.positionX = GAME_WIDTH / 2;
-    g_MainPlayer.positionY = GAME_HEIGHT / 2;
-    g_MainPlayer.width = 8;
-    g_MainPlayer.height = 8;
+    //Setting Debug info display toggle
+    g_PerformanceData.displayDebugInfo = FALSE;
 
     //BackBuffer Initialization
     g_GameBackbuffer.bitMapInfo.bmiHeader.biSize = sizeof(g_GameBackbuffer.bitMapInfo.bmiHeader);
@@ -69,7 +72,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     }
 
     //Frame Processing
-    float timeElapsedInMicrosecondsPerFrame = 0;
+    float timeElapsedInMicroseconds = 0;
     int64_t start = GetPerformanceCounter();
 
     while (g_GameIsRunning == TRUE) {
@@ -80,28 +83,31 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         ProcessInput(windowHandle);
         RenderGraphics(windowHandle);
 
-
         int64_t end = GetPerformanceCounter();
-        timeElapsedInMicrosecondsPerFrame = GetMicrosecondsElapsed(start, end);
+        timeElapsedInMicroseconds = GetMicrosecondsElapsed(start, end);
         
         //Calculating RAW FPS every FRAME_INTERVAL frames
         if ((g_PerformanceData.totalRawFramesRendered % FRAME_INTERVAL) == 0) {
-            g_PerformanceData.rawFPS = (uint32_t)(1 / (timeElapsedInMicrosecondsPerFrame / 1000000));
+            g_PerformanceData.rawFPS = (uint32_t)(1 / (timeElapsedInMicroseconds / 1000000));
+
+            //Getting some debug info (handles and memory usage)
+            GetProcessHandleCount(GetCurrentProcess(), &g_PerformanceData.handleCount);
+            K32GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&g_PerformanceData.memoryInfo, sizeof(g_PerformanceData.memoryInfo));
         }
         
         //This while loop enforces the target FPS
-        while (timeElapsedInMicrosecondsPerFrame < TARGET_MICSECS_FOR_60_FPS) {
-            if (sleepIsGranular == TRUE) {
-                uint32_t milisecondsToSleep = (uint32_t)((TARGET_MICSECS_FOR_60_FPS - timeElapsedInMicrosecondsPerFrame) / 1000);
-                Sleep(milisecondsToSleep);
+        while (timeElapsedInMicroseconds < TARGET_MICSECS_PER_FRAME) {
+            if (timeElapsedInMicroseconds < (TARGET_MICSECS_PER_FRAME * 0.8)) {
+                Sleep(desiredTimeResolutionForScheduler);
             }
+            
             end = GetPerformanceCounter();
-            timeElapsedInMicrosecondsPerFrame = GetMicrosecondsElapsed(start, end);
+            timeElapsedInMicroseconds = GetMicrosecondsElapsed(start, end);
         }
 
-        //Calculating VIRTUAL FPS every FRAME_INTERVAL frames
+        //Calculating VIRTUAL FPS every FRAME_INTERVAL frames (after the while loop to enforce target FPS)
         if ((g_PerformanceData.totalRawFramesRendered % FRAME_INTERVAL) == 0) {
-            g_PerformanceData.virtualFPS = (uint16_t)(1 / (timeElapsedInMicrosecondsPerFrame / 1000000));
+            g_PerformanceData.virtualFPS = (uint16_t)(1 / (timeElapsedInMicroseconds / 1000000));
         }
 
         g_PerformanceData.totalRawFramesRendered++;
@@ -110,6 +116,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
 Exit:
 
+    //Maybe we don't need to do this, but I'm not 100% sure bout that (so I'm going to still use this function)
     timeEndPeriod(desiredTimeResolutionForScheduler);
     return returnValue;
 }
@@ -126,7 +133,19 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
             PostQuitMessage(0);
             break;
         }
-
+        case WM_ACTIVATE:
+        {
+            if (wParameter == 0) {
+                //game lost focus
+                g_GameIsFocused = FALSE;
+            }
+            else {
+                //game gained focus
+                g_GameIsFocused = TRUE;
+                ShowCursor(FALSE);
+            }
+            break;
+        }
         default:
         {
             result = DefWindowProcA(windowHandle, messageID, wParameter, lParameter);
@@ -204,9 +223,6 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
         goto Exit;
     }
 
-    //I wanna hide our cursor for the game
-    ShowCursor(FALSE);
-
 Exit:
 
     return windowHandle;
@@ -223,6 +239,11 @@ BOOL GameIsRunning(void) {
 }
 
 void ProcessInput(HWND windowHandle) {
+    //We don't wanna do any sort of input processing when we're not on focus (this is a temporary solution)
+    if (g_GameIsFocused == FALSE) {
+        return;
+    }
+    
     int16_t closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
     int16_t debugKeyIsDown = GetAsyncKeyState(VK_TAB);
 
@@ -254,8 +275,27 @@ void RenderGraphics(HWND windowHandle) {
     COLOR c1 = {.red = 0x1f, .green = 0x00, .blue = 0x49};
     DrawBackground(c1);
 
+    //Drawing main player
     DrawRectangle(g_MainPlayer.positionX - g_MainPlayer.width/2, g_MainPlayer.positionY - g_MainPlayer.height / 2,
                   g_MainPlayer.width, g_MainPlayer.height, g_MainPlayer.color);
+
+    //Drawing Enemies
+    for (uint32_t i = 0; i < _countof(g_Enemies); i++)
+    {        
+        if ((g_Enemies[i].positionX + g_Enemies[i].width >= GAME_WIDTH) || (g_Enemies[i].positionX <= 0)) {
+            g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
+        }
+        
+        if ((g_Enemies[i].positionY + g_Enemies[i].height >= GAME_HEIGHT) || (g_Enemies[i].positionY <= 0)) {
+            g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
+        }
+
+        DrawRectangle(g_Enemies[i].positionX, g_Enemies[i].positionY, g_Enemies[i].width, g_Enemies[i].height, g_Enemies[i].color);
+        
+        //This code should probably not be in this function
+        g_Enemies[i].positionX = g_Enemies[i].positionX + g_Enemies[i].speedX;
+        g_Enemies[i].positionY = g_Enemies[i].positionY + g_Enemies[i].speedY;
+    }
 
     //Backbuffer Streching
     int32_t stretchDIBitsReturn = StretchDIBits(deviceContext, 0, 0, g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight,
@@ -279,9 +319,14 @@ void RenderGraphics(HWND windowHandle) {
         sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%f, %f)", g_MainPlayer.positionX, g_MainPlayer.positionY);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.positionX, g_MainPlayer.positionY);
         TextOutA(deviceContext, 0, 26, fpsRawString, (int)strlen(fpsRawString));
 
+        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
+        TextOutA(deviceContext, 0, 39, fpsRawString, (int)strlen(fpsRawString));
+
+        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        TextOutA(deviceContext, 0, 52, fpsRawString, (int)strlen(fpsRawString));
     }
 
 Exit: 
@@ -325,16 +370,28 @@ int64_t GetPerformanceFrequency(void) {
 }
 
 void DrawBackground(COLOR color) {
+
+#ifdef _SIMD
     //Drawing background with SSE2 instruction
-    __m128i quadPixel = { color.blue, color.green, color.red, 0x00, 
-                          color.blue, color.green, color.red, 0x00, 
-                          color.blue, color.green, color.red, 0x00,
-                          color.blue, color.green, color.red, 0x00 };
+    __m128i quadPixel = { color.blue, color.green, color.red, 0xFF, 
+                          color.blue, color.green, color.red, 0xFF, 
+                          color.blue, color.green, color.red, 0xFF,
+                          color.blue, color.green, color.red, 0xFF };
 
     for (int i = 0; i < (GAME_WIDTH * GAME_HEIGHT) / 4; i++)
     {
         _mm_store_si128((__m128i*) g_GameBackbuffer.Memory + i, quadPixel);
     }
+#else
+
+    PIXEL pixel = InitializePixel(color.red, color.green, color.blue, 0xFF);
+
+    for (int i = 0; i < (GAME_WIDTH * GAME_HEIGHT); i++)
+    {
+        memcpy((PIXEL*) g_GameBackbuffer.Memory + i, &pixel, sizeof(PIXEL));
+    }
+
+#endif
 }
 
 void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color) {
@@ -378,6 +435,54 @@ void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, CO
 }
 
 int32_t RoundFloorToInt32(float number) {
-    int32_t result = (int32_t)(number + 0.5f);
-    return result;
+    if (number < 0) return (int32_t)(number - 0.5f);
+    return (int32_t)(number + 0.5f);
+}
+
+void InitializeMainPlayer(void) {
+    COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F };
+    g_MainPlayer.color = playerColor;
+    //Since the player's position is the same as the mouse position, then it doesn't matter where we place it here
+    g_MainPlayer.positionX = 0;
+    g_MainPlayer.positionY = 0;
+    g_MainPlayer.width = 10;
+    g_MainPlayer.height = 10;
+}
+
+void InitializeEnemies(void) {
+    
+    //Their spawn positions should be random
+    //Their speeds should be random as well (but not too random)
+
+    COLOR enemyColor = { .red = 0x13, .green = 0x16, .blue = 0xff };
+    
+    uint32_t enemy_count = _countof(g_Enemies);
+    float speedScale = 0.5f;
+    float spawnRegionWidth = GAME_WIDTH * 0.8f;
+    float spawnRegionHeight = GAME_HEIGHT * 0.2f;
+    float spawnRegionPositionX = (GAME_WIDTH - spawnRegionWidth) / 2;
+    float spawnRegionPositionY = 15;
+
+    for (uint32_t i = 0; i < enemy_count; i++)
+    {
+        g_Enemies[i].color = enemyColor;
+        g_Enemies[i].positionX = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
+        g_Enemies[i].positionY = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
+        g_Enemies[i].width = 10;
+        g_Enemies[i].height = 10;
+        g_Enemies[i].speedX = RandomUInt32InRange(1, 10) * speedScale;
+        g_Enemies[i].speedY = RandomUInt32InRange(1, 10) * speedScale;
+    }
+}
+
+uint32_t RandomUInt32(void) {
+    static uint32_t seed = 94714729;
+    seed ^= seed << 13;
+    seed ^= seed >> 7;
+    seed ^= seed << 17;
+    return seed;
+}
+
+uint32_t RandomUInt32InRange(uint32_t min, uint32_t max) {
+    return RandomUInt32() % (max - min) + min;
 }

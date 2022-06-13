@@ -2,20 +2,21 @@
 
 #define GAME_NAME					"Game"
 
-#define GAME_WIDTH					384
-#define GAME_HEIGHT					240
+#define GAME_WIDTH					683		//1366
+#define GAME_HEIGHT					384		//768
 #define GAME_POSITION_X				100
 #define GAME_POSITION_Y				100
 #define GAME_PIXEL_DEPTH			32														//In bits
 #define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * (GAME_PIXEL_DEPTH / 8))		//In bytes
 #define BYTES_PER_PIXEL				(GAME_PIXEL_DEPTH / 8)
 
-#define TARGET_MICSECS_FOR_60_FPS	16667
-#define TARGET_MICSECS_FOR_30_FPS	33333
+#define TARGET_MICSECS_PER_FRAME	16667
 
-#define FRAME_INTERVAL				25														//For debugging display only really
+#define FRAME_INTERVAL				10														//For debugging display only really
 
 #define MESSAGEBOX_ERROR_STYLE		(MB_ICONEXCLAMATION | MB_OK)
+
+#define _SIMD
 
 /// <summary>
 /// 
@@ -24,6 +25,8 @@
 ///		global variables.
 /// 
 /// </summary>
+
+typedef unsigned long ul32_t;
 
 typedef struct GAMEBITMAP {
 	BITMAPINFO bitMapInfo;							
@@ -45,6 +48,10 @@ typedef struct GAME_PERFORMANCE_DATA {
 	int32_t monitorHeight;							//Player's monitor height
 
 	BOOL displayDebugInfo;							//Toggle for displaying debug info into the screen
+
+	ul32_t handleCount;								//Quantity of handles used by the whole process
+
+	PROCESS_MEMORY_COUNTERS_EX memoryInfo;			//Structure that carries a bunch of information about our program's memory
 } GAME_PERFORMANCE_DATA;
 
 typedef struct COLOR {
@@ -66,6 +73,17 @@ typedef struct PLAYER {
 	float width;
 	float height;
 } PLAYER;
+
+//for now it has the same attributes as PLAYER
+typedef struct ENEMY {
+	COLOR color;
+	float positionX;
+	float positionY;
+	float width;
+	float height;
+	float speedX;
+	float speedY;
+} ENEMY;
 
 /// <summary>
 /// 
@@ -93,3 +111,7 @@ int64_t GetPerformanceFrequency(void);
 void DrawBackground(COLOR color);
 void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color);
 int32_t RoundFloorToInt32(float number);
+void InitializeMainPlayer(void);
+void InitializeEnemies(void);
+uint32_t RandomUInt32(void);
+uint32_t RandomUInt32InRange(uint32_t min, uint32_t max);
