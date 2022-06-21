@@ -2,8 +2,8 @@
 
 #define GAME_NAME					"Game"
 
-#define GAME_WIDTH					683		//1366
-#define GAME_HEIGHT					384		//768
+#define GAME_WIDTH					1366
+#define GAME_HEIGHT					768
 #define GAME_POSITION_X				100
 #define GAME_POSITION_Y				100
 #define GAME_PIXEL_DEPTH			32														//In bits
@@ -17,6 +17,8 @@
 #define MESSAGEBOX_ERROR_STYLE		(MB_ICONEXCLAMATION | MB_OK)
 
 #define _SIMD
+
+#define MOUSE_MOVEMENT
 
 /// <summary>
 /// 
@@ -66,21 +68,26 @@ typedef struct PIXEL {
 	uint8_t alpha;
 } PIXEL;
 
+typedef struct RECTANGLE {
+	float x;
+	float y;
+	float width;
+	float height;
+} RECTANGLE;
+
 typedef struct PLAYER {
 	COLOR color;
-	float positionX;
-	float positionY;
-	float width;
-	float height;
+	RECTANGLE rect;
+
+#ifndef MOUSE_MOVEMENT
+	float speedX;
+	float speedY;
+#endif
 } PLAYER;
 
-//for now it has the same attributes as PLAYER
 typedef struct ENEMY {
 	COLOR color;
-	float positionX;
-	float positionY;
-	float width;
-	float height;
+	RECTANGLE rect;
 	float speedX;
 	float speedY;
 } ENEMY;
@@ -98,7 +105,7 @@ typedef struct ENEMY {
 /// </summary>
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);							//Responder of window messages
-HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, uint16_t windowX, uint16_t windowY);
+HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(HWND windowHandle);
 void RenderGraphics(HWND windowHandle);
@@ -109,9 +116,10 @@ float GetSecondsElapsed(int64_t start, int64_t end);
 int64_t GetPerformanceCounter(void);
 int64_t GetPerformanceFrequency(void);
 void DrawBackground(COLOR color);
-void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color);
+void DrawRectangle(RECTANGLE rect, COLOR color);
 int32_t RoundFloorToInt32(float number);
 void InitializeMainPlayer(void);
 void InitializeEnemies(void);
 uint32_t RandomUInt32(void);
 uint32_t RandomUInt32InRange(uint32_t min, uint32_t max);
+BOOL IsColliding(RECTANGLE object1, RECTANGLE object2);

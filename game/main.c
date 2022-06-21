@@ -13,6 +13,8 @@ GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
 ENEMY g_Enemies[10] = {0};
+uint32_t g_Seed = 0;
+uint64_t g_Timer = 0;
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -37,7 +39,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     }
 
     //Main window creation
-    HWND windowHandle = CreateMainWindow(GAME_NAME, GAME_WIDTH, GAME_HEIGHT, GAME_POSITION_X, GAME_POSITION_Y);
+    HWND windowHandle = CreateMainWindow(GAME_NAME, (RECTANGLE) { (float)GAME_POSITION_X, (float)GAME_POSITION_Y, (float)GAME_WIDTH, (float)GAME_HEIGHT});
     if (windowHandle == NULL) {
         returnValue = EXIT_FAILURE;
         goto Exit;
@@ -100,7 +102,6 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
             if (timeElapsedInMicroseconds < (TARGET_MICSECS_PER_FRAME * 0.8)) {
                 Sleep(desiredTimeResolutionForScheduler);
             }
-            
             end = GetPerformanceCounter();
             timeElapsedInMicroseconds = GetMicrosecondsElapsed(start, end);
         }
@@ -111,6 +112,8 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         }
 
         g_PerformanceData.totalRawFramesRendered++;
+        g_Timer += (uint64_t)timeElapsedInMicroseconds;
+
         start = end;
     }
 
@@ -155,7 +158,7 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
     return result;
 }
 
-HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, uint16_t windowX, uint16_t windowY)
+HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect)
 {
     HWND windowHandle = NULL;
 
@@ -181,7 +184,8 @@ HWND CreateMainWindow(const char* windowTitle, uint16_t width, uint16_t height, 
 
     //Creating first Window Class Handle
     windowHandle = CreateWindowExA(0, windowClass.lpszClassName, windowTitle, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                                        windowX, windowY, width, height, NULL, NULL, windowClass.hInstance, NULL);
+                                        (int)windowRect.x, (int)windowRect.y, (int)windowRect.width, (int)windowRect.height, 
+                                        NULL, NULL, windowClass.hInstance, NULL);
 
     if (windowHandle == NULL)
     {
@@ -249,13 +253,6 @@ void ProcessInput(HWND windowHandle) {
 
     static BOOL debugKeyWasDown;
 
-    POINT mousePosition = { 0 };
-    GetCursorPos(&mousePosition);
-    ScreenToClient(windowHandle, &mousePosition);
-
-    float widthRatio = ((float) GAME_WIDTH / (float) g_PerformanceData.monitorWidth);
-    float heightRatio = ((float) GAME_HEIGHT / (float) g_PerformanceData.monitorHeight);
-
     if (closeKeyIsDown) {
         SendMessageA(windowHandle, WM_CLOSE, 0, 0);
     }
@@ -263,9 +260,67 @@ void ProcessInput(HWND windowHandle) {
         g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
     }
 
-    g_MainPlayer.positionX = mousePosition.x * widthRatio;
-    g_MainPlayer.positionY = mousePosition.y * heightRatio;
+#ifdef MOUSE_MOVEMENT
+    //Movement with mouse
+
+    //Getting mouse position in the window
+    POINT mousePosition = { 0 };
+    GetCursorPos(&mousePosition);
+    ScreenToClient(windowHandle, &mousePosition);
+
+    float widthRatio = ((float)GAME_WIDTH / (float)g_PerformanceData.monitorWidth);
+    float heightRatio = ((float)GAME_HEIGHT / (float)g_PerformanceData.monitorHeight);
     
+    //Updating player's position
+    g_MainPlayer.rect.x = mousePosition.x * widthRatio;
+    g_MainPlayer.rect.y = mousePosition.y * heightRatio;
+
+#else
+
+    int16_t upKeyIsDown = GetAsyncKeyState(0x57); // 'W' VK_CODE
+    int16_t downKeyIsDown = GetAsyncKeyState(0x53); // 'S' VK_CODE
+    int16_t leftKeyIsDown = GetAsyncKeyState(0x41); // 'A' VK_CODE
+    int16_t rightKeyIsDown = GetAsyncKeyState(0x44); // 'D' VK_CODE
+
+    g_MainPlayer.speedX = 3;
+    g_MainPlayer.speedY = 3;
+
+    //Movement with WASD
+    if (upKeyIsDown) {
+        if (g_MainPlayer.rect.y <= 0) {
+            g_MainPlayer.rect.y = 0;
+        }
+        else {
+            g_MainPlayer.rect.y -= g_MainPlayer.speedY;
+        }
+    }
+    if (downKeyIsDown) {
+        if (g_MainPlayer.rect.y + g_MainPlayer.rect.height > GAME_HEIGHT) {
+            g_MainPlayer.rect.y = GAME_HEIGHT - g_MainPlayer.rect.height;
+        }
+        else {
+            g_MainPlayer.rect.y += g_MainPlayer.speedY;
+        }
+    }
+    if (leftKeyIsDown) {
+        if (g_MainPlayer.rect.x <= 0) {
+            g_MainPlayer.rect.x = 0;
+        }
+        else {
+            g_MainPlayer.rect.x -= g_MainPlayer.speedX;
+        }
+    }
+    if (rightKeyIsDown) {
+        if (g_MainPlayer.rect.x + g_MainPlayer.rect.width > GAME_WIDTH) {
+            g_MainPlayer.rect.x = GAME_WIDTH - g_MainPlayer.rect.width;
+        }
+        else {
+            g_MainPlayer.rect.x += g_MainPlayer.speedX;
+        }
+    }
+
+#endif // MOUSE_MOVEMENT
+
     debugKeyWasDown = debugKeyIsDown;
 }
 
@@ -276,25 +331,27 @@ void RenderGraphics(HWND windowHandle) {
     DrawBackground(c1);
 
     //Drawing main player
-    DrawRectangle(g_MainPlayer.positionX - g_MainPlayer.width/2, g_MainPlayer.positionY - g_MainPlayer.height / 2,
-                  g_MainPlayer.width, g_MainPlayer.height, g_MainPlayer.color);
+    DrawRectangle(g_MainPlayer.rect, g_MainPlayer.color);
 
     //Drawing Enemies
     for (uint32_t i = 0; i < _countof(g_Enemies); i++)
     {        
-        if ((g_Enemies[i].positionX + g_Enemies[i].width >= GAME_WIDTH) || (g_Enemies[i].positionX <= 0)) {
+        if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= GAME_WIDTH) || (g_Enemies[i].rect.x <= 0)) {
             g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
         }
         
-        if ((g_Enemies[i].positionY + g_Enemies[i].height >= GAME_HEIGHT) || (g_Enemies[i].positionY <= 0)) {
+        if ((g_Enemies[i].rect.y + g_Enemies[i].rect.height >= GAME_HEIGHT) || (g_Enemies[i].rect.y <= 0)) {
             g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
         }
 
-        DrawRectangle(g_Enemies[i].positionX, g_Enemies[i].positionY, g_Enemies[i].width, g_Enemies[i].height, g_Enemies[i].color);
+        //collision checking should also probably not be in rendering
+        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == FALSE) {
+            DrawRectangle(g_Enemies[i].rect, g_Enemies[i].color);
+        }
         
         //This code should probably not be in this function
-        g_Enemies[i].positionX = g_Enemies[i].positionX + g_Enemies[i].speedX;
-        g_Enemies[i].positionY = g_Enemies[i].positionY + g_Enemies[i].speedY;
+        g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
+        g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
     }
 
     //Backbuffer Streching
@@ -319,14 +376,20 @@ void RenderGraphics(HWND windowHandle) {
         sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.positionX, g_MainPlayer.positionY);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
         TextOutA(deviceContext, 0, 26, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
         TextOutA(deviceContext, 0, 39, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
         TextOutA(deviceContext, 0, 52, fpsRawString, (int)strlen(fpsRawString));
+
+        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        TextOutA(deviceContext, 0, 65, fpsRawString, (int)strlen(fpsRawString));
+
+        sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
+        TextOutA(deviceContext, 0, 78, fpsRawString, (int)strlen(fpsRawString));
     }
 
 Exit: 
@@ -394,12 +457,12 @@ void DrawBackground(COLOR color) {
 #endif
 }
 
-void DrawRectangle(float inMinX, float inMinY, float inWidth, float inHeight, COLOR color) {
+void DrawRectangle(RECTANGLE rect, COLOR color) {
     
-    int32_t minX = RoundFloorToInt32(inMinX);
-    int32_t minY = RoundFloorToInt32(inMinY);
-    int32_t width = RoundFloorToInt32(inWidth);
-    int32_t height = RoundFloorToInt32(inHeight);
+    int32_t minX = RoundFloorToInt32(rect.x);
+    int32_t minY = RoundFloorToInt32(rect.y);
+    int32_t width = RoundFloorToInt32(rect.width);
+    int32_t height = RoundFloorToInt32(rect.height);
     
     //Bounds checking
     if (minX < 0)
@@ -443,10 +506,10 @@ void InitializeMainPlayer(void) {
     COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F };
     g_MainPlayer.color = playerColor;
     //Since the player's position is the same as the mouse position, then it doesn't matter where we place it here
-    g_MainPlayer.positionX = 0;
-    g_MainPlayer.positionY = 0;
-    g_MainPlayer.width = 10;
-    g_MainPlayer.height = 10;
+    g_MainPlayer.rect.x = GAME_WIDTH / 2;
+    g_MainPlayer.rect.y = GAME_HEIGHT / 2;
+    g_MainPlayer.rect.width = 20;
+    g_MainPlayer.rect.height = 20;
 }
 
 void InitializeEnemies(void) {
@@ -466,23 +529,35 @@ void InitializeEnemies(void) {
     for (uint32_t i = 0; i < enemy_count; i++)
     {
         g_Enemies[i].color = enemyColor;
-        g_Enemies[i].positionX = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
-        g_Enemies[i].positionY = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
-        g_Enemies[i].width = 10;
-        g_Enemies[i].height = 10;
+        g_Enemies[i].rect.x = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
+        g_Enemies[i].rect.y = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
+        g_Enemies[i].rect.width = 20;
+        g_Enemies[i].rect.height = 20;
         g_Enemies[i].speedX = RandomUInt32InRange(1, 10) * speedScale;
         g_Enemies[i].speedY = RandomUInt32InRange(1, 10) * speedScale;
     }
 }
 
 uint32_t RandomUInt32(void) {
-    static uint32_t seed = 94714729;
-    seed ^= seed << 13;
-    seed ^= seed >> 7;
-    seed ^= seed << 17;
-    return seed;
+    g_Seed = (uint32_t)GetPerformanceCounter();
+    g_Seed ^= g_Seed << 13;
+    g_Seed ^= g_Seed >> 7;
+    g_Seed ^= g_Seed << 17;
+    return g_Seed;
 }
 
 uint32_t RandomUInt32InRange(uint32_t min, uint32_t max) {
     return RandomUInt32() % (max - min) + min;
+}
+
+BOOL IsColliding(RECTANGLE object1, RECTANGLE object2) {
+    
+    if ((object1.x <=  object2.x + object2.width) &&
+        (object1.x + object1.width >= object2.x) &&
+        (object1.y <= object2.y + object2.height) &&
+        (object1.y + object1.height >= object2.y))
+    {
+        return TRUE;
+    }
+    return FALSE;
 }
