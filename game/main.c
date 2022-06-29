@@ -67,7 +67,8 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     g_GameBackbuffer.bitMapInfo.bmiHeader.biPlanes = 1;
 
     //Backbuffer Memory Allocation
-    g_GameBackbuffer.Memory = VirtualAlloc(NULL, GAME_BACKBUFFER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+    g_GameBackbuffer.Memory = VirtualAlloc(NULL, GAME_BACKBUFFER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    g_GameBackbuffer.hasAlreadyBeenAllocated = TRUE;
     if (g_GameBackbuffer.Memory == NULL) {
         returnValue = EXIT_FAILURE;
         goto Exit;
@@ -206,7 +207,6 @@ HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect)
 
     g_PerformanceData.monitorWidth = g_PerformanceData.monitorInfo.rcMonitor.right - g_PerformanceData.monitorInfo.rcMonitor.left;
     g_PerformanceData.monitorHeight = g_PerformanceData.monitorInfo.rcMonitor.bottom - g_PerformanceData.monitorInfo.rcMonitor.top;
-    g_GameBackbuffer.pitch = GAME_WIDTH * BYTES_PER_PIXEL;
 
     LONG_PTR pointerReturned = SetWindowLongPtrA(windowHandle, GWL_STYLE, (WS_OVERLAPPEDWINDOW | WS_VISIBLE) & ~WS_OVERLAPPEDWINDOW);
     if (pointerReturned == 0) {
@@ -287,7 +287,7 @@ void ProcessInput(HWND windowHandle) {
 
     //Movement with WASD
     if (upKeyIsDown) {
-        if (g_MainPlayer.rect.y <= 0) {
+        if (g_MainPlayer.rect.y - g_MainPlayer.speedY <= 0) {
             g_MainPlayer.rect.y = 0;
         }
         else {
@@ -295,7 +295,7 @@ void ProcessInput(HWND windowHandle) {
         }
     }
     if (downKeyIsDown) {
-        if (g_MainPlayer.rect.y + g_MainPlayer.rect.height > GAME_HEIGHT) {
+        if (g_MainPlayer.rect.y + g_MainPlayer.rect.height + g_MainPlayer.speedY > GAME_HEIGHT) {
             g_MainPlayer.rect.y = GAME_HEIGHT - g_MainPlayer.rect.height;
         }
         else {
@@ -303,7 +303,7 @@ void ProcessInput(HWND windowHandle) {
         }
     }
     if (leftKeyIsDown) {
-        if (g_MainPlayer.rect.x <= 0) {
+        if (g_MainPlayer.rect.x - +g_MainPlayer.speedX <= 0) {
             g_MainPlayer.rect.x = 0;
         }
         else {
@@ -311,7 +311,7 @@ void ProcessInput(HWND windowHandle) {
         }
     }
     if (rightKeyIsDown) {
-        if (g_MainPlayer.rect.x + g_MainPlayer.rect.width > GAME_WIDTH) {
+        if (g_MainPlayer.rect.x + g_MainPlayer.rect.width + g_MainPlayer.speedX > GAME_WIDTH) {
             g_MainPlayer.rect.x = GAME_WIDTH - g_MainPlayer.rect.width;
         }
         else {
@@ -334,6 +334,7 @@ void RenderGraphics(HWND windowHandle) {
     DrawRectangle(g_MainPlayer.rect, g_MainPlayer.color);
 
     //Drawing Enemies
+    BOOL playerCollided = FALSE;
     for (uint32_t i = 0; i < _countof(g_Enemies); i++)
     {        
         if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= GAME_WIDTH) || (g_Enemies[i].rect.x <= 0)) {
@@ -348,10 +349,22 @@ void RenderGraphics(HWND windowHandle) {
         if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == FALSE) {
             DrawRectangle(g_Enemies[i].rect, g_Enemies[i].color);
         }
+        else {
+            //An enemy is colliding with the player
+            playerCollided = TRUE;
+        }
         
         //This code should probably not be in this function
         g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
         g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
+    }
+    
+    //Reloading the level
+    //Reset level (how do I reset the level? Reset player's position, enemies' position, timer)
+    if (playerCollided == TRUE) {
+        InitializeMainPlayer();
+        InitializeEnemies();
+        g_Timer = 0;
     }
 
     //Backbuffer Streching
@@ -363,34 +376,29 @@ void RenderGraphics(HWND windowHandle) {
         goto Exit;
     }
 
+    char fpsRawString[256];
     if (g_PerformanceData.displayDebugInfo == TRUE) {
-
-        //Selecting font for debugging
-        SelectObject(deviceContext, (HFONT)GetStockObject(ANSI_FIXED_FONT));
-
-        //Render FPS data
-        char fpsRawString[256];
+        //Render debug data
         sprintf_s(fpsRawString, _countof(fpsRawString), "RAW FPS: %u", g_PerformanceData.rawFPS);
-        TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         TextOutA(deviceContext, 0, 26, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
         TextOutA(deviceContext, 0, 39, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
         TextOutA(deviceContext, 0, 52, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
         TextOutA(deviceContext, 0, 65, fpsRawString, (int)strlen(fpsRawString));
 
-        sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
+        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
         TextOutA(deviceContext, 0, 78, fpsRawString, (int)strlen(fpsRawString));
     }
+    sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
+    TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
 
 Exit: 
 
@@ -505,22 +513,20 @@ int32_t RoundFloorToInt32(float number) {
 void InitializeMainPlayer(void) {
     COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F };
     g_MainPlayer.color = playerColor;
+    //Get pixels from bitmap and put on GAMEBITMAP variable
+    LoadBitmapFromFile("..\\assets\\mainPlayer.bmp", &g_MainPlayer.sprite);
     //Since the player's position is the same as the mouse position, then it doesn't matter where we place it here
     g_MainPlayer.rect.x = GAME_WIDTH / 2;
     g_MainPlayer.rect.y = GAME_HEIGHT / 2;
-    g_MainPlayer.rect.width = 20;
-    g_MainPlayer.rect.height = 20;
+    g_MainPlayer.rect.width = 16;
+    g_MainPlayer.rect.height = 16;
 }
 
 void InitializeEnemies(void) {
-    
-    //Their spawn positions should be random
-    //Their speeds should be random as well (but not too random)
-
     COLOR enemyColor = { .red = 0x13, .green = 0x16, .blue = 0xff };
     
     uint32_t enemy_count = _countof(g_Enemies);
-    float speedScale = 0.5f;
+    float speedScale = 0.75f;
     float spawnRegionWidth = GAME_WIDTH * 0.8f;
     float spawnRegionHeight = GAME_HEIGHT * 0.2f;
     float spawnRegionPositionX = (GAME_WIDTH - spawnRegionWidth) / 2;
@@ -529,16 +535,19 @@ void InitializeEnemies(void) {
     for (uint32_t i = 0; i < enemy_count; i++)
     {
         g_Enemies[i].color = enemyColor;
+        //Get pixels from bitmap and put on GAMEBITMAP variable
+        LoadBitmapFromFile("..\\assets\\bee.bmp", &g_Enemies[i].sprite);
         g_Enemies[i].rect.x = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
         g_Enemies[i].rect.y = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
-        g_Enemies[i].rect.width = 20;
-        g_Enemies[i].rect.height = 20;
-        g_Enemies[i].speedX = RandomUInt32InRange(1, 10) * speedScale;
-        g_Enemies[i].speedY = RandomUInt32InRange(1, 10) * speedScale;
+        g_Enemies[i].rect.width = 16;
+        g_Enemies[i].rect.height = 16;
+        g_Enemies[i].speedX = RandomUInt32InRange(5, 10) * speedScale * RandomSign();
+        g_Enemies[i].speedY = RandomUInt32InRange(5, 10) * speedScale * RandomSign();
     }
 }
 
 uint32_t RandomUInt32(void) {
+    //XOR SHIFT
     g_Seed = (uint32_t)GetPerformanceCounter();
     g_Seed ^= g_Seed << 13;
     g_Seed ^= g_Seed >> 7;
@@ -550,8 +559,16 @@ uint32_t RandomUInt32InRange(uint32_t min, uint32_t max) {
     return RandomUInt32() % (max - min) + min;
 }
 
+BOOL RandomBool(void) {
+    return RandomUInt32() % 2 == 0;
+}
+
+int8_t RandomSign(void) {
+    return (RandomBool() == TRUE) ? 1 : -1;
+}
+
 BOOL IsColliding(RECTANGLE object1, RECTANGLE object2) {
-    
+    //aabb
     if ((object1.x <=  object2.x + object2.width) &&
         (object1.x + object1.width >= object2.x) &&
         (object1.y <= object2.y + object2.height) &&
@@ -560,4 +577,104 @@ BOOL IsColliding(RECTANGLE object1, RECTANGLE object2) {
         return TRUE;
     }
     return FALSE;
+}
+
+DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest) {
+
+    DWORD returnValue = EXIT_SUCCESS;
+
+    //If we've allocated this before, then we don't need to do all the work again
+    if (dest->hasAlreadyBeenAllocated == TRUE) {
+        return returnValue;
+    }
+
+    WORD bitmapHeader = 0;
+    DWORD pixelOffset = 0;
+    DWORD bytesRead = 0;
+
+    //Getting handle to the specified file
+    HANDLE fileHandle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (fileHandle == INVALID_HANDLE_VALUE) {
+        MessageBoxA(NULL, "Failed to create a file handle...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Reading the 2 first bytes of the file to check if it is a Bitmap in the first place
+    BOOL readReaturnValue = ReadFile(fileHandle, &bitmapHeader, sizeof(WORD), &bytesRead, NULL);
+    if (readReaturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read header from file...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+    if (bitmapHeader != 0x4d42) {
+        returnValue = ERROR_FILE_INVALID;
+        goto Exit;
+    }
+    
+    //Setting the file pointer ot the 10th byte
+    DWORD setFilePointerReturn = SetFilePointer(fileHandle, 0xA, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer to pixel data...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Reading the byte offset of the pixel array
+    readReaturnValue = ReadFile(fileHandle, &pixelOffset, sizeof(DWORD), &bytesRead, NULL);
+    if (readReaturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read pixel offset from file...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Setting the file pointer ot the 14th byte
+    setFilePointerReturn = SetFilePointer(fileHandle, 0xE, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer to BITMAPINFOHEADER offset...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Reading the byte offset of the pixel array
+    readReaturnValue = ReadFile(fileHandle, &dest->bitMapInfo, 40, &bytesRead, NULL);
+    if (readReaturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read BITMAPINFOHEADER structure...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Allocating memory in the heap for bitmap
+    dest->Memory = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dest->bitMapInfo.bmiHeader.biSizeImage);
+    if (dest->Memory == NULL) {
+        MessageBoxA(NULL, "Failed to allocate memory in the heap...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = ERROR_NOT_ENOUGH_MEMORY;
+        goto Exit;
+    }
+
+    //Setting the file pointer ot the pixel array
+    setFilePointerReturn = SetFilePointer(fileHandle, pixelOffset, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer to pixel array offset...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Reading the pixel array to dest->Memory
+    readReaturnValue = ReadFile(fileHandle, dest->Memory, dest->bitMapInfo.bmiHeader.biSizeImage, &bytesRead, NULL);
+    if (readReaturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read pixel array to memory...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //PIXEL LAYOUT => BB GG RR AA
+
+Exit:
+
+    if (fileHandle != NULL && fileHandle != INVALID_HANDLE_VALUE) {
+        CloseHandle(fileHandle);
+    }
+
+    return returnValue;
 }

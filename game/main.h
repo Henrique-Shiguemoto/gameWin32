@@ -18,7 +18,7 @@
 
 #define _SIMD
 
-#define MOUSE_MOVEMENT
+//#define MOUSE_MOVEMENT
 
 /// <summary>
 /// 
@@ -33,7 +33,7 @@ typedef unsigned long ul32_t;
 typedef struct GAMEBITMAP {
 	BITMAPINFO bitMapInfo;							
 	void* Memory;									//Actual memory buffer (although it's a void pointer, we're interpreting this a pixel buffer)
-	int32_t pitch;
+	BOOL hasAlreadyBeenAllocated;
 } GAMEBITMAP;
 
 typedef struct GAME_PERFORMANCE_DATA {
@@ -78,6 +78,7 @@ typedef struct RECTANGLE {
 typedef struct PLAYER {
 	COLOR color;
 	RECTANGLE rect;
+	GAMEBITMAP sprite;
 
 #ifndef MOUSE_MOVEMENT
 	float speedX;
@@ -88,6 +89,7 @@ typedef struct PLAYER {
 typedef struct ENEMY {
 	COLOR color;
 	RECTANGLE rect;
+	GAMEBITMAP sprite;
 	float speedX;
 	float speedY;
 } ENEMY;
@@ -123,3 +125,6 @@ void InitializeEnemies(void);
 uint32_t RandomUInt32(void);
 uint32_t RandomUInt32InRange(uint32_t min, uint32_t max);
 BOOL IsColliding(RECTANGLE object1, RECTANGLE object2);
+BOOL RandomBool(void);
+int8_t RandomSign(void);
+DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
