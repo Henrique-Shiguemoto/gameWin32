@@ -2,8 +2,8 @@
 
 #define GAME_NAME					"Game"
 
-#define GAME_WIDTH					1366
-#define GAME_HEIGHT					768
+#define GAME_WIDTH					(1366/2)
+#define GAME_HEIGHT					(768/2)
 #define GAME_POSITION_X				100
 #define GAME_POSITION_Y				100
 #define GAME_PIXEL_DEPTH			32														//In bits
@@ -33,7 +33,6 @@ typedef unsigned long ul32_t;
 typedef struct GAMEBITMAP {
 	BITMAPINFO bitMapInfo;							
 	void* Memory;									//Actual memory buffer (although it's a void pointer, we're interpreting this a pixel buffer)
-	BOOL hasAlreadyBeenAllocated;
 } GAMEBITMAP;
 
 typedef struct GAME_PERFORMANCE_DATA {
@@ -128,3 +127,4 @@ BOOL IsColliding(RECTANGLE object1, RECTANGLE object2);
 BOOL RandomBool(void);
 int8_t RandomSign(void);
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
+void DrawBitmap(GAMEBITMAP* bitmap, float minX, float minY);

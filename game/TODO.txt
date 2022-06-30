@@ -1,4 +1,3 @@
-add bitmaps to main player and enemies
 add sounds and music
 add main menu scene
 add game over scene

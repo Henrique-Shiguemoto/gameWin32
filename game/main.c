@@ -51,10 +51,6 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     //Setting the game to start running
     g_GameIsRunning = TRUE;
 
-    //MainPlayer and Enemies Initialization
-    InitializeMainPlayer();
-    InitializeEnemies();
-
     //Setting Debug info display toggle
     g_PerformanceData.displayDebugInfo = FALSE;
 
@@ -68,11 +64,22 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
     //Backbuffer Memory Allocation
     g_GameBackbuffer.Memory = VirtualAlloc(NULL, GAME_BACKBUFFER_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    g_GameBackbuffer.hasAlreadyBeenAllocated = TRUE;
     if (g_GameBackbuffer.Memory == NULL) {
         returnValue = EXIT_FAILURE;
         goto Exit;
     }
+
+    //Loading all bitmaps
+    //LoadBitmapFromFile("..\\assets\\background.bmp", &g_GameBackbuffer);
+    LoadBitmapFromFile("..\\assets\\mainPlayer.bmp", &g_MainPlayer.sprite);
+    for (uint16_t i = 0; i < _countof(g_Enemies); i++)
+    {
+        LoadBitmapFromFile("..\\assets\\bee.bmp", &g_Enemies[i].sprite);
+    }
+
+    //MainPlayer and Enemies Initialization
+    InitializeMainPlayer();
+    InitializeEnemies();
 
     //Frame Processing
     float timeElapsedInMicroseconds = 0;
@@ -327,11 +334,14 @@ void ProcessInput(HWND windowHandle) {
 void RenderGraphics(HWND windowHandle) {
     HDC deviceContext = GetDC(windowHandle);
 
-    COLOR c1 = {.red = 0x1f, .green = 0x00, .blue = 0x49};
+    //Drawing Background
+    COLOR c1 = {.red = 0x00, .green = 0x4F, .blue = 0x08};
     DrawBackground(c1);
+    //DrawBitmap(&g_GameBackbuffer, 0.0, 0.0);
 
     //Drawing main player
-    DrawRectangle(g_MainPlayer.rect, g_MainPlayer.color);
+    //DrawRectangle(g_MainPlayer.rect, g_MainPlayer.color);
+    DrawBitmap(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
 
     //Drawing Enemies
     BOOL playerCollided = FALSE;
@@ -340,20 +350,16 @@ void RenderGraphics(HWND windowHandle) {
         if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= GAME_WIDTH) || (g_Enemies[i].rect.x <= 0)) {
             g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
         }
-        
         if ((g_Enemies[i].rect.y + g_Enemies[i].rect.height >= GAME_HEIGHT) || (g_Enemies[i].rect.y <= 0)) {
             g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
         }
 
         //collision checking should also probably not be in rendering
-        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == FALSE) {
-            DrawRectangle(g_Enemies[i].rect, g_Enemies[i].color);
-        }
-        else {
-            //An enemy is colliding with the player
+        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
             playerCollided = TRUE;
         }
-        
+        DrawBitmap(&g_Enemies[i].sprite, g_Enemies[i].rect.x, g_Enemies[i].rect.y);
+
         //This code should probably not be in this function
         g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
         g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
@@ -376,7 +382,7 @@ void RenderGraphics(HWND windowHandle) {
         goto Exit;
     }
 
-    char fpsRawString[256];
+    char fpsRawString[128];
     if (g_PerformanceData.displayDebugInfo == TRUE) {
         //Render debug data
         sprintf_s(fpsRawString, _countof(fpsRawString), "RAW FPS: %u", g_PerformanceData.rawFPS);
@@ -396,9 +402,11 @@ void RenderGraphics(HWND windowHandle) {
 
         sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
         TextOutA(deviceContext, 0, 78, fpsRawString, (int)strlen(fpsRawString));
+
+        //timer
+        sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
+        TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
     }
-    sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
-    TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
 
 Exit: 
 
@@ -513,8 +521,6 @@ int32_t RoundFloorToInt32(float number) {
 void InitializeMainPlayer(void) {
     COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F };
     g_MainPlayer.color = playerColor;
-    //Get pixels from bitmap and put on GAMEBITMAP variable
-    LoadBitmapFromFile("..\\assets\\mainPlayer.bmp", &g_MainPlayer.sprite);
     //Since the player's position is the same as the mouse position, then it doesn't matter where we place it here
     g_MainPlayer.rect.x = GAME_WIDTH / 2;
     g_MainPlayer.rect.y = GAME_HEIGHT / 2;
@@ -535,14 +541,12 @@ void InitializeEnemies(void) {
     for (uint32_t i = 0; i < enemy_count; i++)
     {
         g_Enemies[i].color = enemyColor;
-        //Get pixels from bitmap and put on GAMEBITMAP variable
-        LoadBitmapFromFile("..\\assets\\bee.bmp", &g_Enemies[i].sprite);
         g_Enemies[i].rect.x = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
         g_Enemies[i].rect.y = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
         g_Enemies[i].rect.width = 16;
         g_Enemies[i].rect.height = 16;
-        g_Enemies[i].speedX = RandomUInt32InRange(5, 10) * speedScale * RandomSign();
-        g_Enemies[i].speedY = RandomUInt32InRange(5, 10) * speedScale * RandomSign();
+        g_Enemies[i].speedX = RandomUInt32InRange(2, 5)* speedScale* RandomSign();
+        g_Enemies[i].speedY = RandomUInt32InRange(2, 5)* speedScale* RandomSign();
     }
 }
 
@@ -582,11 +586,6 @@ BOOL IsColliding(RECTANGLE object1, RECTANGLE object2) {
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest) {
 
     DWORD returnValue = EXIT_SUCCESS;
-
-    //If we've allocated this before, then we don't need to do all the work again
-    if (dest->hasAlreadyBeenAllocated == TRUE) {
-        return returnValue;
-    }
 
     WORD bitmapHeader = 0;
     DWORD pixelOffset = 0;
@@ -677,4 +676,39 @@ Exit:
     }
 
     return returnValue;
+}
+
+void DrawBitmap(GAMEBITMAP* bitmap, float minX, float minY) {
+    uint32_t blitWidth = bitmap->bitMapInfo.bmiHeader.biWidth;
+    uint32_t blitHeight = bitmap->bitMapInfo.bmiHeader.biHeight;
+    
+    if (minX < 0) {
+        minX = 0;
+    }
+    if (minY < 0) {
+        minY = 0;
+    }
+    if (minX + blitWidth > g_GameBackbuffer.bitMapInfo.bmiHeader.biWidth) {
+        blitWidth = GAME_WIDTH - (int32_t)minX;
+    }
+    if (minY + blitHeight > g_GameBackbuffer.bitMapInfo.bmiHeader.biHeight) {
+        blitHeight = GAME_HEIGHT - (int32_t)minY;
+    }
+
+    //Calculating the beginning of the memory from the backbuffer to draw to
+    PIXEL* startingPixel = (PIXEL*)g_GameBackbuffer.Memory + (((GAME_WIDTH * GAME_HEIGHT) - GAME_WIDTH) - (GAME_WIDTH * (int32_t)minY) + (int32_t)minX);
+
+    for (uint32_t y = 0; y < blitHeight; y++)
+    {
+        for (uint32_t x = 0; x < blitWidth; x++)
+        {
+            PIXEL* pixelFromBitmap = (PIXEL*) bitmap->Memory + x + (y * blitWidth);
+            
+            //We're only going to draw fully opaque colors
+            if(pixelFromBitmap->alpha == 0xFF) {
+                PIXEL* pixelToBeModified = startingPixel + x - (y * GAME_WIDTH);
+                *pixelToBeModified = *pixelFromBitmap;
+            }
+        }
+    }
 }
