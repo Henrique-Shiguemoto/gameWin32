@@ -91,7 +91,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <DisableSpecificWarnings>4668;28251;4820;5045;4100;</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4668;28251;4820;5045;4100;26451;</DisableSpecificWarnings>
       <SupportJustMyCode>false</SupportJustMyCode>
     </ClCompile>
     <Link>
@@ -109,7 +109,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <DisableSpecificWarnings>4668;28251;4820;5045;4100;</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4668;28251;4820;5045;4100;26451;</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -126,7 +126,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <DisableSpecificWarnings>4668;28251;4820;5045;4100;</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4668;28251;4820;5045;4100;26451;</DisableSpecificWarnings>
       <SupportJustMyCode>false</SupportJustMyCode>
     </ClCompile>
     <Link>
@@ -144,7 +144,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <DisableSpecificWarnings>4668;28251;4820;5045;4100;</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4668;28251;4820;5045;4100;26451;</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -155,10 +155,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="draw.c" />
+    <ClCompile Include="init.c" />
+    <ClCompile Include="load.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="math.c" />
+    <ClCompile Include="thread.c" />
+    <ClCompile Include="time.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="draw.h" />
+    <ClInclude Include="init.h" />
+    <ClInclude Include="load.h" />
     <ClInclude Include="main.h" />
+    <ClInclude Include="math.h" />
+    <ClInclude Include="thread.h" />
+    <ClInclude Include="time.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="TODO.txt" />

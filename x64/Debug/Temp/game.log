@@ -1,2 +1,4 @@
-﻿  main.c
+﻿  draw.c
+  main.c
+  Generating Code...
   game.vcxproj -> C:\dev\c-cpp\C\gameSln\x64\Debug\game.exe

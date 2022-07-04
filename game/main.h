@@ -1,14 +1,18 @@
 #pragma once
 
+#include <stdint.h>
+#include <windows.h>
+#include <Psapi.h>
+
 #define GAME_NAME					"Game"
 
-#define GAME_WIDTH					(1366/2)
-#define GAME_HEIGHT					(768/2)
+#define GAME_WIDTH					(640)
+#define GAME_HEIGHT					(360)
 #define GAME_POSITION_X				100
 #define GAME_POSITION_Y				100
 #define GAME_PIXEL_DEPTH			32														//In bits
-#define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * (GAME_PIXEL_DEPTH / 8))		//In bytes
 #define BYTES_PER_PIXEL				(GAME_PIXEL_DEPTH / 8)
+#define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * BYTES_PER_PIXEL)			//In bytes
 
 #define TARGET_MICSECS_PER_FRAME	16667
 
@@ -18,15 +22,7 @@
 
 #define _SIMD
 
-//#define MOUSE_MOVEMENT
-
-/// <summary>
-/// 
-/// These are custom data types used to facilitate development and
-///		make it more organized, since I could simply make them all
-///		global variables.
-/// 
-/// </summary>
+#define ENEMY_COUNT					10
 
 typedef unsigned long ul32_t;
 
@@ -62,6 +58,7 @@ typedef struct COLOR {
 } COLOR;
 
 //Not recommended to add or take stuff from here, because we're using pointer conversions (PIXEL*)
+//PIXEL LAYOUT => BB GG RR AA (from bitmaps)
 typedef struct PIXEL {
 	COLOR color;
 	uint8_t alpha;
@@ -78,11 +75,8 @@ typedef struct PLAYER {
 	COLOR color;
 	RECTANGLE rect;
 	GAMEBITMAP sprite;
-
-#ifndef MOUSE_MOVEMENT
 	float speedX;
 	float speedY;
-#endif
 } PLAYER;
 
 typedef struct ENEMY {
@@ -93,38 +87,13 @@ typedef struct ENEMY {
 	float speedY;
 } ENEMY;
 
-/// <summary>
-/// 
-///	These are the declarations of custom functions I used
-///		throughout the development of this project.
-/// 
-/// For now these are not entirely organized in terms of 
-///		what they're used for, I just think of a function
-///		to make and declare it here at the end of the list.
-///		All organize it later.
-/// 
-/// </summary>
+typedef struct BACKGROUND {
+	GAMEBITMAP background;
+	RECTANGLE rect;
+} BACKGROUND;
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);							//Responder of window messages
 HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(HWND windowHandle);
 void RenderGraphics(HWND windowHandle);
-PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
-float GetMicrosecondsElapsed(int64_t start, int64_t end);
-float GetMilisecondsElapsed(int64_t start, int64_t end);
-float GetSecondsElapsed(int64_t start, int64_t end);
-int64_t GetPerformanceCounter(void);
-int64_t GetPerformanceFrequency(void);
-void DrawBackground(COLOR color);
-void DrawRectangle(RECTANGLE rect, COLOR color);
-int32_t RoundFloorToInt32(float number);
-void InitializeMainPlayer(void);
-void InitializeEnemies(void);
-uint32_t RandomUInt32(void);
-uint32_t RandomUInt32InRange(uint32_t min, uint32_t max);
-BOOL IsColliding(RECTANGLE object1, RECTANGLE object2);
-BOOL RandomBool(void);
-int8_t RandomSign(void);
-DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
-void DrawBitmap(GAMEBITMAP* bitmap, float minX, float minY);
