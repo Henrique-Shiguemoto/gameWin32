@@ -20,8 +20,9 @@ GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
 ENEMY g_Enemies[ENEMY_COUNT] = { 0 };
 BACKGROUND g_Background = { 0 };
+GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
-RECTANGLE g_PlayableArea = { 110.0, 0.0, GAME_WIDTH, GAME_HEIGHT };
+RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT };
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -79,6 +80,9 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     //Loading all bitmaps
     LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_Background.background);
     g_Background.rect = g_PlayableArea;
+
+    //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
+    LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font);
 
     LoadBitmapFromFile("..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
     for (uint16_t i = 0; i < ENEMY_COUNT; i++)
@@ -202,6 +206,7 @@ void ProcessInput(HWND windowHandle) {
 }
 
 void RenderGraphics(HWND windowHandle) {
+    //We need the device context for StrechDIBits
     HDC deviceContext = GetDC(windowHandle);
 
     //Drawing Background
@@ -214,6 +219,7 @@ void RenderGraphics(HWND windowHandle) {
     BOOL playerCollided = FALSE;
     for (uint32_t i = 0; i < ENEMY_COUNT; i++)
     {   
+        //Checking if they're colliding with the "walls" of the window
         if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= g_PlayableArea.width) || (g_Enemies[i].rect.x <= g_PlayableArea.x)) {
             g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
         }
@@ -225,9 +231,10 @@ void RenderGraphics(HWND windowHandle) {
         if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
             playerCollided = TRUE;
         }
+        //Drawing enemy
         DrawBitmapInPlayableArea(&g_Enemies[i].sprite, g_Enemies[i].rect.x, g_Enemies[i].rect.y);
 
-        //This code should probably not be in this function
+        //Adding the enemy speed to the enemy's position
         g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
         g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
     }
@@ -240,6 +247,45 @@ void RenderGraphics(HWND windowHandle) {
         g_Timer = 0;
     }
 
+    //Drawing timer
+    char timerString[20];
+    COLOR timerStringColor = { 0 };
+    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
+    DrawString(timerString, &g_Font, 1, GAME_HEIGHT - 10, timerStringColor);
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 20, debugStringColor);
+        //TextOutA(deviceContext, 0, 13, debugString, (int)strlen(debugString));
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 30, debugStringColor);
+        //TextOutA(deviceContext, 0, 26, debugString, (int)strlen(debugString));
+
+        sprintf_s(debugString, _countof(debugString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 40, debugStringColor);
+        //TextOutA(deviceContext, 0, 39, debugString, (int)strlen(debugString));
+
+        sprintf_s(debugString, _countof(debugString), "ENEMY POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 50, debugStringColor);
+        //TextOutA(deviceContext, 0, 52, debugString, (int)strlen(debugString));
+
+        sprintf_s(debugString, _countof(debugString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 60, debugStringColor);
+        //TextOutA(deviceContext, 0, 65, debugString, (int)strlen(debugString));
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 70, debugStringColor);
+        //TextOutA(deviceContext, 0, 78, debugString, (int)strlen(debugString));
+    }
+#endif
+
     //Backbuffer Streching
     int32_t stretchDIBitsReturn = StretchDIBits(deviceContext, 0, 0, g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight,
                                                                0, 0, GAME_WIDTH, GAME_HEIGHT,
@@ -247,32 +293,6 @@ void RenderGraphics(HWND windowHandle) {
     if (stretchDIBitsReturn == 0) {
         MessageBoxA(NULL, "Error while stretching the backbuffer to the monitor...", "Error!", MESSAGEBOX_ERROR_STYLE);
         goto Exit;
-    }
-
-    char fpsRawString[128];
-    if (g_PerformanceData.displayDebugInfo == TRUE) {
-        //Render debug data
-        sprintf_s(fpsRawString, _countof(fpsRawString), "RAW FPS: %u", g_PerformanceData.rawFPS);
-        TextOutA(deviceContext, 0, 13, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
-        TextOutA(deviceContext, 0, 26, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
-        TextOutA(deviceContext, 0, 39, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "ENEMY POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
-        TextOutA(deviceContext, 0, 52, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
-        TextOutA(deviceContext, 0, 65, fpsRawString, (int)strlen(fpsRawString));
-
-        sprintf_s(fpsRawString, _countof(fpsRawString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
-        TextOutA(deviceContext, 0, 78, fpsRawString, (int)strlen(fpsRawString));
-
-        //timer
-        sprintf_s(fpsRawString, _countof(fpsRawString), "TIMER IN SECONDS: %llu s", g_Timer / 1000000);
-        TextOutA(deviceContext, 0, 0, fpsRawString, (int)strlen(fpsRawString));
     }
 
 Exit: 

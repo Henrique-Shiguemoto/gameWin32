@@ -44,3 +44,9 @@ int32_t RoundFloorToInt32(float number) {
     if (number < 0) return (int32_t)(number - 0.5f);
     return (int32_t)(number + 0.5f);
 }
+
+float Clamp32(float min, float max, float value) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}

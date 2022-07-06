@@ -22,7 +22,9 @@
 
 #define _SIMD
 
-#define ENEMY_COUNT					10
+#define ENEMY_COUNT					1
+
+#define FONT_SHEET_CHARACTER_WIDTH	98
 
 typedef unsigned long ul32_t;
 

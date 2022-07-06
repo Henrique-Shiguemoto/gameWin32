@@ -32,7 +32,7 @@ void InitializeMainPlayer(void) {
 void InitializeEnemies(void) {
     COLOR enemyColor = { .red = 0x13, .green = 0x16, .blue = 0xff };
 
-    float speedScale = 0.65f;
+    float speedScale = 0.0f;
     float spawnRegionWidth = (g_PlayableArea.width - g_PlayableArea.x) * 0.8f;
     float spawnRegionHeight = GAME_HEIGHT * 0.2f;
     float spawnRegionPositionX = (g_PlayableArea.x + GAME_WIDTH - spawnRegionWidth) / 2;
