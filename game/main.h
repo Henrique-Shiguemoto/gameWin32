@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <Psapi.h>
 
-#define GAME_NAME					"Game"
+#define GAME_NAME					"QuickFlower"
 
 #define GAME_WIDTH					(640)
 #define GAME_HEIGHT					(360)
@@ -22,7 +22,7 @@
 
 #define _SIMD
 
-#define ENEMY_COUNT					1
+#define ENEMY_COUNT					15
 
 #define FONT_SHEET_CHARACTER_WIDTH	98
 
@@ -47,8 +47,6 @@ typedef struct GAME_PERFORMANCE_DATA {
 	int32_t monitorHeight;							//Player's monitor height
 
 	BOOL displayDebugInfo;							//Toggle for displaying debug info into the screen
-
-	ul32_t handleCount;								//Quantity of handles used by the whole process
 
 	PROCESS_MEMORY_COUNTERS_EX memoryInfo;			//Structure that carries a bunch of information about our program's memory
 } GAME_PERFORMANCE_DATA;
@@ -93,6 +91,12 @@ typedef struct BACKGROUND {
 	GAMEBITMAP background;
 	RECTANGLE rect;
 } BACKGROUND;
+
+typedef enum GAMESTATE {
+	GS_MENU,
+	GS_LEVEL,
+	GS_NOSTATE
+} GAMESTATE;
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);							//Responder of window messages
 HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);

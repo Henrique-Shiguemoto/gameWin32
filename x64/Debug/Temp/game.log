@@ -1,9 +1,4 @@
 ﻿  draw.c
-  init.c
-  load.c
   main.c
-  math.c
-  thread.c
-  time.c
   Generating Code...
   game.vcxproj -> C:\dev\c-cpp\C\gameSln\x64\Debug\game.exe

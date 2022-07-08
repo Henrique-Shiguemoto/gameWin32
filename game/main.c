@@ -11,18 +11,27 @@
 #include "load.h"
 #include "time.h"
 #include "math.h"
+#include "menu.h"
 #include "thread.h"
 
-BOOL g_GameIsRunning = FALSE;
+GAMESTATE g_GameState = GS_NOSTATE;
 BOOL g_GameIsFocused = TRUE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
 ENEMY g_Enemies[ENEMY_COUNT] = { 0 };
-BACKGROUND g_Background = { 0 };
+BACKGROUND g_MenuBackground = { 0 };
+BACKGROUND g_LevelBackground = { 0 };
 GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
-RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT };
+RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT - 15};
+
+//MENU ITEMS, WE'LL TAKE IT FROM HERE AFTER
+MENUITEM g_StartGameButton = { (char*)"Start Game", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2) - 40, StartGameButtonAction };
+MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 70, ControlsButtonAction };
+MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 90, QuitButtonAction };
+GAMEBITMAP g_MenuFlowerBitmap = { 0 };
+GAMEBITMAP g_MenuBeeBitmap = { 0 };
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -56,8 +65,8 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     //Getting the fixed clock frequency
     g_PerformanceData.frequency = GetPerformanceFrequency();
 
-    //Setting the game to start running
-    g_GameIsRunning = TRUE;
+    //Setting the game to start in the starting menu
+    g_GameState = GS_MENU;
 
     //Setting Debug info display toggle
     g_PerformanceData.displayDebugInfo = FALSE;
@@ -78,8 +87,13 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     }
 
     //Loading all bitmaps
-    LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_Background.background);
-    g_Background.rect = g_PlayableArea;
+    LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
+
+    LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
+    g_LevelBackground.rect = g_PlayableArea;
+
+    LoadBitmapFromFile("..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
+    LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
 
     //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
     LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font);
@@ -98,7 +112,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     float timeElapsedInMicroseconds = 0;
     int64_t start = GetPerformanceCounter();
 
-    while (g_GameIsRunning == TRUE) {
+    while (g_GameState != GS_NOSTATE) {
         
         while (PeekMessageA(&message, windowHandle, 0, 0, PM_REMOVE)) {
             DispatchMessageA(&message);
@@ -112,9 +126,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         //Calculating RAW FPS every FRAME_INTERVAL frames
         if ((g_PerformanceData.totalRawFramesRendered % FRAME_INTERVAL) == 0) {
             g_PerformanceData.rawFPS = (uint32_t)(1 / (timeElapsedInMicroseconds / 1000000));
-
-            //Getting some debug info (handles and memory usage)
-            GetProcessHandleCount(GetCurrentProcess(), &g_PerformanceData.handleCount);
+            
             K32GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&g_PerformanceData.memoryInfo, sizeof(g_PerformanceData.memoryInfo));
         }
         
@@ -132,6 +144,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
             g_PerformanceData.virtualFPS = (uint16_t)(1 / (timeElapsedInMicroseconds / 1000000));
         }
 
+        //Updating our amount of frames and level timer
         g_PerformanceData.totalRawFramesRendered++;
         g_Timer += (uint64_t)timeElapsedInMicroseconds;
 
@@ -151,6 +164,21 @@ void ProcessInput(HWND windowHandle) {
         return;
     }
     
+    switch (g_GameState) {
+        case GS_MENU: {
+            break;
+        }
+        case GS_LEVEL: {
+            break;
+        }
+        case GS_NOSTATE: {
+            return;
+        }
+        default: {
+            return;
+        }
+    }
+
     int16_t closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
     int16_t debugKeyIsDown = GetAsyncKeyState(VK_TAB);
 
@@ -209,82 +237,22 @@ void RenderGraphics(HWND windowHandle) {
     //We need the device context for StrechDIBits
     HDC deviceContext = GetDC(windowHandle);
 
-    //Drawing Background
-    DrawBitmapInPlayableArea(&g_Background.background, g_Background.rect.x, g_Background.rect.y);
-
-    //Drawing main player
-    DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
-
-    //Drawing Enemies
-    BOOL playerCollided = FALSE;
-    for (uint32_t i = 0; i < ENEMY_COUNT; i++)
-    {   
-        //Checking if they're colliding with the "walls" of the window
-        if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= g_PlayableArea.width) || (g_Enemies[i].rect.x <= g_PlayableArea.x)) {
-            g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
+    switch (g_GameState) {
+        case GS_MENU: {
+            DrawMenu();
+            break;
         }
-        if ((g_Enemies[i].rect.y + g_Enemies[i].rect.height >= g_PlayableArea.height) || (g_Enemies[i].rect.y <= g_PlayableArea.y)) {
-            g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
+        case GS_LEVEL: {
+            DrawLevel();
+            break;
         }
-
-        //collision checking should also probably not be in rendering
-        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
-            playerCollided = TRUE;
+        case GS_NOSTATE: {
+            return;
         }
-        //Drawing enemy
-        DrawBitmapInPlayableArea(&g_Enemies[i].sprite, g_Enemies[i].rect.x, g_Enemies[i].rect.y);
-
-        //Adding the enemy speed to the enemy's position
-        g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
-        g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
+        default: {
+            return;
+        }
     }
-    
-    //Reloading the level
-    //Reset level (how do I reset the level? Reset player's position, enemies' position, timer)
-    if (playerCollided == TRUE) {
-        InitializeMainPlayer();
-        InitializeEnemies();
-        g_Timer = 0;
-    }
-
-    //Drawing timer
-    char timerString[20];
-    COLOR timerStringColor = { 0 };
-    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
-    DrawString(timerString, &g_Font, 1, GAME_HEIGHT - 10, timerStringColor);
-
-#ifdef _DEBUG
-    //Drawing debug code
-    if (g_PerformanceData.displayDebugInfo == TRUE) {
-        char debugString[200];
-        COLOR debugStringColor = { 0xff, 0xff, 0xff };
-
-        //Render debug data
-        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 20, debugStringColor);
-        //TextOutA(deviceContext, 0, 13, debugString, (int)strlen(debugString));
-
-        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 30, debugStringColor);
-        //TextOutA(deviceContext, 0, 26, debugString, (int)strlen(debugString));
-
-        sprintf_s(debugString, _countof(debugString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 40, debugStringColor);
-        //TextOutA(deviceContext, 0, 39, debugString, (int)strlen(debugString));
-
-        sprintf_s(debugString, _countof(debugString), "ENEMY POSITION: (%.1f, %.1f)", g_Enemies[0].rect.x, g_Enemies[0].rect.y);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 50, debugStringColor);
-        //TextOutA(deviceContext, 0, 52, debugString, (int)strlen(debugString));
-
-        sprintf_s(debugString, _countof(debugString), "HANDLE COUNT: %lu", g_PerformanceData.handleCount);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 60, debugStringColor);
-        //TextOutA(deviceContext, 0, 65, debugString, (int)strlen(debugString));
-
-        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 70, debugStringColor);
-        //TextOutA(deviceContext, 0, 78, debugString, (int)strlen(debugString));
-    }
-#endif
 
     //Backbuffer Streching
     int32_t stretchDIBitsReturn = StretchDIBits(deviceContext, 0, 0, g_PerformanceData.monitorWidth, g_PerformanceData.monitorHeight,
@@ -308,7 +276,7 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
     {
         case WM_CLOSE:
         {
-            g_GameIsRunning = FALSE;
+            g_GameState = GS_NOSTATE;
             PostQuitMessage(0);
             break;
         }

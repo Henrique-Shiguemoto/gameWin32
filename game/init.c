@@ -3,9 +3,9 @@
 #include "main.h"
 #include "math.h"
 
-extern PLAYER g_MainPlayer;
-extern ENEMY g_Enemies[20];
 extern RECTANGLE g_PlayableArea;
+extern PLAYER g_MainPlayer;
+extern ENEMY g_Enemies[ENEMY_COUNT];
 
 PIXEL InitializePixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
     PIXEL pixel = { 0 };
@@ -32,7 +32,7 @@ void InitializeMainPlayer(void) {
 void InitializeEnemies(void) {
     COLOR enemyColor = { .red = 0x13, .green = 0x16, .blue = 0xff };
 
-    float speedScale = 0.0f;
+    float speedScale = 0.75f;
     float spawnRegionWidth = (g_PlayableArea.width - g_PlayableArea.x) * 0.8f;
     float spawnRegionHeight = GAME_HEIGHT * 0.2f;
     float spawnRegionPositionX = (g_PlayableArea.x + GAME_WIDTH - spawnRegionWidth) / 2;

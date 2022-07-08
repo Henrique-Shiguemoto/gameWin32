@@ -1,13 +1,27 @@
 #include <emmintrin.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "draw.h"
 #include "main.h"
 #include "init.h"
+#include "menu.h"
 #include "math.h"
 
 extern GAMEBITMAP g_GameBackbuffer;
 extern RECTANGLE g_PlayableArea;
+extern PLAYER g_MainPlayer;
+extern ENEMY g_Enemies[ENEMY_COUNT];
+extern BACKGROUND g_MenuBackground;
+extern BACKGROUND g_LevelBackground;
+extern uint64_t g_Timer;
+extern GAME_PERFORMANCE_DATA g_PerformanceData;
+extern GAMEBITMAP g_Font;
+extern MENUITEM g_StartGameButton;
+extern MENUITEM g_ControlsButton;
+extern MENUITEM g_QuitButton;
+extern GAMEBITMAP g_MenuFlowerBitmap;
+extern GAMEBITMAP g_MenuBeeBitmap;
 
 void DrawBackground(COLOR color) {
 
@@ -718,4 +732,120 @@ void DrawString(int8_t* string, GAMEBITMAP* fontSheet, float minX, float minY, C
     if(stringBitmap.Memory) {
         HeapFree(GetProcessHeap(), 0, stringBitmap.Memory);
     }
+}
+
+void DrawMenu(void) {
+    //Drawing background
+    DrawBitmap(&g_MenuBackground.background, 0.0, 0.0);
+
+    //Drawing Game Name
+    DrawString(GAME_NAME, &g_Font, (GAME_WIDTH / 2) - 33, GAME_HEIGHT - 100, (COLOR) { 0 });
+
+    //Drawing Flower and Bee
+    DrawBitmap(&g_MenuFlowerBitmap, (GAME_WIDTH / 4) - 32, GAME_HEIGHT / 2);
+    DrawBitmap(&g_MenuBeeBitmap, (3 * GAME_WIDTH / 4) - 32, GAME_HEIGHT / 2);
+
+    //Drawing MENUITEMS
+    DrawString(g_StartGameButton.name, &g_Font, g_StartGameButton.minX, g_StartGameButton.minY, (COLOR) { 0 });
+    DrawString(g_ControlsButton.name, & g_Font, g_ControlsButton.minX, g_ControlsButton.minY, (COLOR) { 0 });
+    DrawString(g_QuitButton.name, &g_Font, g_QuitButton.minX, g_QuitButton.minY, (COLOR) { 0 });
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
+    }
+#endif
+}
+
+void DrawLevel(void) {
+    //Drawing Background
+    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+
+    //Drawing main player
+    DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
+
+    //Drawing Enemies
+    BOOL playerCollided = FALSE;
+    for (uint32_t i = 0; i < ENEMY_COUNT; i++)
+    {
+        //Checking if they're colliding with the "walls" of the window
+        if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= g_PlayableArea.width) || (g_Enemies[i].rect.x <= g_PlayableArea.x)) {
+            g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
+        }
+        if ((g_Enemies[i].rect.y + g_Enemies[i].rect.height >= g_PlayableArea.height) || (g_Enemies[i].rect.y <= g_PlayableArea.y)) {
+            g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
+        }
+
+        //collision checking should also probably not be in rendering
+        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
+            playerCollided = TRUE;
+        }
+        //Drawing enemy
+        DrawBitmapInPlayableArea(&g_Enemies[i].sprite, g_Enemies[i].rect.x, g_Enemies[i].rect.y);
+
+        //Adding the enemy speed to the enemy's position
+        g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
+        g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
+    }
+
+    //Reloading the level if the player collided with one enemy at least
+    if (playerCollided == TRUE) {
+        InitializeMainPlayer();
+        InitializeEnemies();
+        g_Timer = 0;
+    }
+
+    //Drawing Header Rectangle
+    DrawRectangle((RECTANGLE) { 0, GAME_HEIGHT - 15, GAME_WIDTH, 15 }, (COLOR) { 0x0 });
+
+    //Drawing the name of the game
+    char gameNameString[20];
+    COLOR gameNameStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(gameNameString, _countof(gameNameString), GAME_NAME);
+    DrawString(gameNameString, &g_Font, 5, GAME_HEIGHT - 10, gameNameStringColor);
+
+    //Drawing Current Timer
+    char timerString[20];
+    COLOR timerStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
+    DrawString(timerString, &g_Font, GAME_WIDTH / 2 - 30, GAME_HEIGHT - 10, timerStringColor);
+
+    //Drawing "Quit: Esc"
+    char pauseString[16];
+    COLOR pauseStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(pauseString, _countof(pauseString), "Quit: Esc");
+    DrawString(pauseString, &g_Font, GAME_WIDTH - 60, GAME_HEIGHT - 10, pauseStringColor);
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+    }
+#endif
 }
