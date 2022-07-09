@@ -92,6 +92,20 @@ typedef struct BACKGROUND {
 	RECTANGLE rect;
 } BACKGROUND;
 
+typedef struct MENUITEM {
+	char* name;
+	float minX;
+	float minY;
+	void(*Action)(void);
+}MENUITEM;
+
+typedef struct MENU {
+	char* name;
+	uint8_t currentSelectedMenuItem;
+	uint8_t itemCount;
+	MENUITEM** items;
+}MENU;
+
 typedef enum GAMESTATE {
 	GS_MENU,
 	GS_LEVEL,
@@ -102,4 +116,34 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
 HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(HWND windowHandle);
+void ProcessInputMenu(void);
+void ProcessInputLevel(void);
 void RenderGraphics(HWND windowHandle);
+void DrawBackground(COLOR color);
+void DrawRectangle(RECTANGLE rect, COLOR color);
+void DrawRectangleInPlayableArea(RECTANGLE rect, COLOR color);
+void DrawBitmap(GAMEBITMAP* bitmap, float minX, float minY);
+void DrawBitmapInPlayableArea(GAMEBITMAP* bitmap, float minX, float minY);
+void DrawString(int8_t* string, GAMEBITMAP* bitmap, float minX, float minY, COLOR color);
+void DrawMenu(void);
+void DrawLevel(void);
+PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
+void InitializeMainPlayer(void);
+void InitializeEnemies(void);
+DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
+BOOL RandomBool(void);
+int8_t RandomSign(void);
+uint32_t RandomUInt32(void);
+uint32_t RandomUInt32InRange(uint32_t min, uint32_t max);
+BOOL IsColliding(RECTANGLE object1, RECTANGLE object2);
+int32_t RoundFloorToInt32(float number);
+float Clamp32(float min, float max, float value);
+void StartGameButtonAction(void);
+void ControlsButtonAction(void);
+void QuitButtonAction(void);
+BOOL GameIsRunning(void);
+float GetMicrosecondsElapsed(int64_t start, int64_t end);
+float GetMilisecondsElapsed(int64_t start, int64_t end);
+float GetSecondsElapsed(int64_t start, int64_t end);
+int64_t GetPerformanceCounter(void);
+int64_t GetPerformanceFrequency(void);

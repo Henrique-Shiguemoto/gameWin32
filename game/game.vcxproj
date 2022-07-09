@@ -155,24 +155,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="draw.c" />
-    <ClCompile Include="init.c" />
-    <ClCompile Include="load.c" />
     <ClCompile Include="main.c" />
-    <ClCompile Include="math.c" />
-    <ClCompile Include="menu.c" />
-    <ClCompile Include="thread.c" />
-    <ClCompile Include="time.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="draw.h" />
-    <ClInclude Include="init.h" />
-    <ClInclude Include="load.h" />
     <ClInclude Include="main.h" />
-    <ClInclude Include="math.h" />
-    <ClInclude Include="menu.h" />
-    <ClInclude Include="thread.h" />
-    <ClInclude Include="time.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="TODO.txt" />
