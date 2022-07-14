@@ -1,3 +1,3 @@
-add sounds and music
-add main menu scene
+add music
+add logging system (this is just for learning purposes really, the game doesn't need this)
 add game over scene

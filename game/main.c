@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<stdint.h>
 #include<psapi.h>
+#include<xaudio2.h>
 #include<emmintrin.h>
 
 #include "main.h"
@@ -13,22 +14,47 @@ GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
 ENEMY g_Enemies[ENEMY_COUNT] = { 0 };
-BACKGROUND g_MenuBackground = { 0 };
 BACKGROUND g_LevelBackground = { 0 };
 GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
 RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT - 15};
 uint32_t g_Seed = 0;
+GAMEINPUT g_GameInput = { 0 };
+IXAudio2* g_GameAudio = { 0 };
+IXAudio2MasteringVoice* g_MasterVoice = { 0 };
+uint8_t g_SFXSelected = 0;
+float g_SFXVolume = 0.5;
+float g_MusicVolume = 0.5;
+GAMESOUND g_ChangeButtonSelectionSound = { 0 };
+GAMESOUND g_ButtonSelectionSound = { 0 };
+GAMESOUND g_MenuSong = { 0 };
+GAMESOUND g_PlayerHitSound = { 0 };
+GAMESOUND g_LevelSong = { 0 };
+
+//Only one song at a time
+IXAudio2SourceVoice* g_MusicSourceVoice = { 0 };
+
+//We can have up to 4 sound effects at a time
+IXAudio2SourceVoice* g_SFXSourceVoice[SFX_SOURCE_VOICE_COUNT] = { 0 };
 
 //MENU ITEMS, WE'LL TAKE IT FROM HERE AFTER
+BACKGROUND g_MenuBackground = { 0 };
 MENUITEM g_StartGameButton = { (char*)"Start Game", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2) - 40, StartGameButtonAction };
-MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 70, ControlsButtonAction };
-MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 90, QuitButtonAction };
+MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 60, ControlsButtonAction };
+MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 80, QuitButtonAction };
+MENUITEM* g_MenuItems[] = { &g_StartGameButton, &g_ControlsButton, &g_QuitButton };
+MENU g_Menu = { "Main Menu", 0, _countof(g_MenuItems), g_MenuItems};
+
 GAMEBITMAP g_MenuFlowerBitmap = { 0 };
 GAMEBITMAP g_MenuBeeBitmap = { 0 };
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
+    UNREFERENCED_PARAMETER(currentInstanceHandle);
+    UNREFERENCED_PARAMETER(previousInstanceHandle);
+    UNREFERENCED_PARAMETER(commandLine);
+    UNREFERENCED_PARAMETER(windowFlags);
+
     int16_t returnValue = EXIT_SUCCESS;
 
     //This is so the sleep function doesn't sleep for too long because of how fast the Windows Scheduler is
@@ -80,23 +106,30 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         goto Exit;
     }
 
-    //Loading all bitmaps
-    LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
-
-    LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
     g_LevelBackground.rect = g_PlayableArea;
 
+    //Loading all bitmaps
+    LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
+    LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
     LoadBitmapFromFile("..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
     LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
-
-    //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
-    LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font);
-
+    LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
     LoadBitmapFromFile("..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
-    for (uint16_t i = 0; i < ENEMY_COUNT; i++)
-    {
-        LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+    for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+
+    //Initializing sound engine
+    HRESULT soundEngineReturn = InitializeSoundEngine();
+    if (FAILED(soundEngineReturn)) {
+        MessageBoxA(NULL, "Failed to initialize sound engine...", "Error", MESSAGEBOX_ERROR_STYLE);
+        goto Exit;
     }
+
+    //Loading all sounds
+    LoadWavFromFile("..\\assets\\sounds\\menu\\Change_Button_Selection.wav", &g_ChangeButtonSelectionSound);
+    LoadWavFromFile("..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
+    LoadWavFromFile("..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
+    LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
+    LoadWavFromFile("..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
 
     //MainPlayer and Enemies Initialization
     InitializeMainPlayer();
@@ -160,9 +193,11 @@ void ProcessInput(HWND windowHandle) {
     
     switch (g_GameState) {
         case GS_MENU: {
+            ProcessInputMenu(windowHandle);
             break;
         }
         case GS_LEVEL: {
+            ProcessInputLevel(windowHandle);
             break;
         }
         case GS_NOSTATE: {
@@ -171,27 +206,78 @@ void ProcessInput(HWND windowHandle) {
         default: {
             return;
         }
-    }
+    }    
+}
 
-    int16_t closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
-    int16_t debugKeyIsDown = GetAsyncKeyState(VK_TAB);
+void ProcessInputMenu(HWND windowHandle) {
+    g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE); //ESC KEY
+    g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB); //TAB KEY
+    g_GameInput.upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
+    g_GameInput.downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
+    g_GameInput.leftKeyIsDown = GetAsyncKeyState(0x41) | GetAsyncKeyState(VK_LEFT); // 'A' KEY OR LEFT KEY
+    g_GameInput.rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
+    g_GameInput.selectionKeyIsDown = GetAsyncKeyState(VK_RETURN); // ENTER KEY
 
-    static BOOL debugKeyWasDown;
-
-    if (closeKeyIsDown) {
+    if (g_GameInput.closeKeyIsDown) {
         SendMessageA(windowHandle, WM_CLOSE, 0, 0);
     }
-    if (debugKeyIsDown && !debugKeyWasDown) {
+    if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
         g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
     }
 
-    int16_t upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
-    int16_t downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
-    int16_t leftKeyIsDown = GetAsyncKeyState(0x41) | GetAsyncKeyState(VK_LEFT); // 'A' KEY OR LEFT KEY
-    int16_t rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
+    //Changing button selection
+    if (g_GameInput.downKeyIsDown && !g_GameInput.downKeyWasDown) {
+        //We'll only have 3 buttons in our menu, so I'm hard coding the number 2 here
+        if (g_Menu.currentSelectedMenuItem >= 2) {
+            g_Menu.currentSelectedMenuItem = 2;
+        }
+        else {
+            g_Menu.currentSelectedMenuItem++;
+            PlayGameSound(&g_ChangeButtonSelectionSound);
+        }
+    }
+    if (g_GameInput.upKeyIsDown && !g_GameInput.upKeyWasDown) {
+        if (g_Menu.currentSelectedMenuItem <= 0) {
+            g_Menu.currentSelectedMenuItem = 0;
+        }
+        else {
+            g_Menu.currentSelectedMenuItem--;
+            PlayGameSound(&g_ChangeButtonSelectionSound);
+        }
+    }
 
-    //Movement with WASD
-    if (upKeyIsDown) {
+    //Button Selection
+    if (g_GameInput.selectionKeyIsDown && !g_GameInput.selectionKeyWasDown) {
+        //Call the Action function from the MENUITEM struct and then play sound
+        PlayGameSound(&g_ButtonSelectionSound);
+    }
+
+    g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
+    g_GameInput.upKeyWasDown = g_GameInput.upKeyIsDown;
+    g_GameInput.downKeyWasDown = g_GameInput.downKeyIsDown;
+    g_GameInput.leftKeyWasDown = g_GameInput.leftKeyIsDown;
+    g_GameInput.rightKeyWasDown = g_GameInput.rightKeyIsDown;
+    g_GameInput.selectionKeyWasDown = g_GameInput.selectionKeyIsDown;
+}
+
+void ProcessInputLevel(HWND windowHandle) {
+    //Filling GAMEINPUT struct
+    g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
+    g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
+    g_GameInput.upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
+    g_GameInput.downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
+    g_GameInput.leftKeyIsDown = GetAsyncKeyState(0x41) | GetAsyncKeyState(VK_LEFT); // 'A' KEY OR LEFT KEY
+    g_GameInput.rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
+
+    if (g_GameInput.closeKeyIsDown) {
+        SendMessageA(windowHandle, WM_CLOSE, 0, 0);
+    }
+    if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
+        g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
+    }
+
+    //Flower Movement
+    if (g_GameInput.upKeyIsDown) {
         if (g_MainPlayer.rect.y + g_MainPlayer.rect.height + g_MainPlayer.speedY > g_PlayableArea.height) {
             g_MainPlayer.rect.y = g_PlayableArea.height - g_MainPlayer.rect.height;
         }
@@ -199,7 +285,7 @@ void ProcessInput(HWND windowHandle) {
             g_MainPlayer.rect.y += g_MainPlayer.speedY;
         }
     }
-    if (downKeyIsDown) {
+    if (g_GameInput.downKeyIsDown) {
         if (g_MainPlayer.rect.y - g_MainPlayer.speedY <= g_PlayableArea.y) {
             g_MainPlayer.rect.y = g_PlayableArea.y;
         }
@@ -207,7 +293,7 @@ void ProcessInput(HWND windowHandle) {
             g_MainPlayer.rect.y -= g_MainPlayer.speedY;
         }
     }
-    if (leftKeyIsDown) {
+    if (g_GameInput.leftKeyIsDown) {
         if (g_MainPlayer.rect.x - g_MainPlayer.speedX <= g_PlayableArea.x) {
             g_MainPlayer.rect.x = g_PlayableArea.x;
         }
@@ -215,7 +301,7 @@ void ProcessInput(HWND windowHandle) {
             g_MainPlayer.rect.x -= g_MainPlayer.speedX;
         }
     }
-    if (rightKeyIsDown) {
+    if (g_GameInput.rightKeyIsDown) {
         if (g_MainPlayer.rect.x + g_MainPlayer.rect.width + g_MainPlayer.speedX > g_PlayableArea.width) {
             g_MainPlayer.rect.x = g_PlayableArea.width - g_MainPlayer.rect.width;
         }
@@ -224,15 +310,7 @@ void ProcessInput(HWND windowHandle) {
         }
     }
 
-    debugKeyWasDown = debugKeyIsDown;
-}
-
-void ProcessInputMenu(void) {
-
-}
-
-void ProcessInputLevel(void) {
-
+    g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
 }
 
 void RenderGraphics(HWND windowHandle) {
@@ -1100,9 +1178,13 @@ void DrawMenu(void) {
     DrawBitmap(&g_MenuBeeBitmap, (3 * GAME_WIDTH / 4) - 32, GAME_HEIGHT / 2);
 
     //Drawing MENUITEMS
-    DrawString(g_StartGameButton.name, &g_Font, g_StartGameButton.minX, g_StartGameButton.minY, (COLOR) { 0 });
-    DrawString(g_ControlsButton.name, &g_Font, g_ControlsButton.minX, g_ControlsButton.minY, (COLOR) { 0 });
-    DrawString(g_QuitButton.name, &g_Font, g_QuitButton.minX, g_QuitButton.minY, (COLOR) { 0 });
+    for (int16_t i = 0; i < g_Menu.itemCount; i++) {
+        MENUITEM* item = g_Menu.items[i];
+        DrawString(item->name, &g_Font, item->minX, item->minY, (COLOR) { 0 });
+    }
+
+    //Drawing ">"
+    DrawString(">", &g_Font, g_Menu.items[g_Menu.currentSelectedMenuItem]->minX - 10, g_Menu.items[g_Menu.currentSelectedMenuItem]->minY, (COLOR) { 0 });
 
 #ifdef _DEBUG
     //Drawing debug code
@@ -1247,6 +1329,62 @@ void InitializeEnemies(void) {
     }
 }
 
+HRESULT InitializeSoundEngine(void) {
+    WAVEFORMATEX sfxWaveFormat = { 0 };
+    WAVEFORMATEX musicWaveFormat = { 0 };
+
+    HRESULT returnValue = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(returnValue)) {
+        goto Exit;
+    }
+
+    returnValue = XAudio2Create(&g_GameAudio, 0, XAUDIO2_DEFAULT_PROCESSOR);
+    if (FAILED(returnValue)) {
+        goto Exit;
+    }
+
+    returnValue = g_GameAudio->lpVtbl->CreateMasteringVoice(g_GameAudio, &g_MasterVoice, XAUDIO2_DEFAULT_CHANNELS, XAUDIO2_DEFAULT_SAMPLERATE, 0, 0, NULL, 0);
+    if (FAILED(returnValue)) {
+        goto Exit;
+    }
+    
+    //Creating source voices for sound effects
+    sfxWaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    sfxWaveFormat.nChannels = 1; //Our sound effects are mono channel
+    sfxWaveFormat.nSamplesPerSec = 44100;
+    sfxWaveFormat.nBlockAlign = sfxWaveFormat.nChannels * 2;
+    sfxWaveFormat.nAvgBytesPerSec = sfxWaveFormat.nSamplesPerSec * sfxWaveFormat.nBlockAlign;
+    sfxWaveFormat.wBitsPerSample = 16;
+
+    for (int8_t i = 0; i < SFX_SOURCE_VOICE_COUNT; i++)
+    {
+        returnValue = g_GameAudio->lpVtbl->CreateSourceVoice(g_GameAudio, &g_SFXSourceVoice[i], &sfxWaveFormat, 0, XAUDIO2_DEFAULT_FREQ_RATIO, NULL, NULL, NULL);
+        if (FAILED(returnValue)) {
+            goto Exit;
+        }
+        g_SFXSourceVoice[i]->lpVtbl->SetVolume(g_SFXSourceVoice[i], g_SFXVolume, XAUDIO2_COMMIT_NOW);
+    }
+
+    //Creating source voices for music
+    musicWaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    musicWaveFormat.nChannels = 2; //Our music will be stereo
+    musicWaveFormat.nSamplesPerSec = 44100;
+    musicWaveFormat.nBlockAlign = musicWaveFormat.nChannels * 2;
+    musicWaveFormat.nAvgBytesPerSec = musicWaveFormat.nSamplesPerSec * musicWaveFormat.nBlockAlign;
+    musicWaveFormat.wBitsPerSample = 16;
+
+    returnValue = g_GameAudio->lpVtbl->CreateSourceVoice(g_GameAudio, &g_MusicSourceVoice, &musicWaveFormat, 0, XAUDIO2_DEFAULT_FREQ_RATIO, NULL, NULL, NULL);
+    if (FAILED(returnValue)) {
+        goto Exit;
+    }
+    g_MusicSourceVoice->lpVtbl->SetVolume(g_MusicSourceVoice, g_MusicVolume, XAUDIO2_COMMIT_NOW);
+
+
+
+Exit:
+    return returnValue;
+}
+
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest) {
 
     DWORD returnValue = EXIT_SUCCESS;
@@ -1338,6 +1476,142 @@ Exit:
     }
 
     return returnValue;
+}
+
+DWORD LoadWavFromFile(const char* filename, GAMESOUND* dest) {
+    DWORD returnValue = EXIT_SUCCESS;
+
+    DWORD RIFF = 0;
+    DWORD bytesRead = 0;
+    uint16_t dataChunkOffset = 0;
+    DWORD dataChunkSearcher = 0;
+    BOOL dataChunkFound = FALSE;
+    DWORD dataChunkSize = 0;
+
+    //Getting handle to the specified file
+    HANDLE fileHandle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (fileHandle == INVALID_HANDLE_VALUE) {
+        MessageBoxA(NULL, "Failed to create a file handle...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    //Reading the 4 first bytes of the file to check if it is a Bitmap in the first place
+    BOOL readReturnValue = ReadFile(fileHandle, &RIFF, sizeof(DWORD), &bytesRead, NULL);
+    if (readReturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read RIFF header from file...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+    if (RIFF != 0x46464952) {
+        returnValue = ERROR_FILE_INVALID;
+        goto Exit;
+    }
+
+    DWORD setFilePointerReturn = SetFilePointer(fileHandle, 20, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    readReturnValue = ReadFile(fileHandle, &dest->waveFormat, sizeof(WAVEFORMATEX), &bytesRead, NULL);
+    if (readReturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read wave format...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    if ((dest->waveFormat.nBlockAlign != (dest->waveFormat.nChannels * dest->waveFormat.wBitsPerSample) / 8) ||
+        (dest->waveFormat.wFormatTag != WAVE_FORMAT_PCM) ||
+        (dest->waveFormat.wBitsPerSample != 16)) {
+        returnValue = ERROR_DATATYPE_MISMATCH;
+        goto Exit;
+    }
+
+    while (dataChunkFound == FALSE) {
+        setFilePointerReturn = SetFilePointer(fileHandle, dataChunkOffset, NULL, FILE_BEGIN);
+        if(setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+            MessageBoxA(NULL, "Failed to set file pointer...", "Error!", MESSAGEBOX_ERROR_STYLE);
+            returnValue = GetLastError();
+            goto Exit;
+        }
+        
+        readReturnValue = ReadFile(fileHandle, &dataChunkSearcher, sizeof(DWORD), &bytesRead, NULL);
+        if (readReturnValue == 0) {
+            MessageBoxA(NULL, "Failed to read data chunk...", "Error!", MESSAGEBOX_ERROR_STYLE);
+            returnValue = GetLastError();
+            goto Exit;
+        }
+
+        if (dataChunkSearcher != 0x61746164) {
+            dataChunkFound = TRUE;
+        }
+        else {
+            dataChunkOffset = dataChunkOffset + 4;
+        }
+
+        //256 is a random number but it could a #define
+        if (dataChunkOffset > 256) {
+            MessageBoxA(NULL, "Wav data chunk not found within the first 256 bytes...", "Error!", MESSAGEBOX_ERROR_STYLE);
+            returnValue = ERROR_DATATYPE_MISMATCH;
+            goto Exit;
+        }
+    }
+
+    setFilePointerReturn = SetFilePointer(fileHandle, dataChunkOffset + 4, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    readReturnValue = ReadFile(fileHandle, &dataChunkSize, sizeof(DWORD), &bytesRead, NULL);
+    if (readReturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read data chunk size...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    dest->buffer.pAudioData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dataChunkSize);
+    if (dest->buffer.pAudioData == NULL) {
+        returnValue = ERROR_NOT_ENOUGH_MEMORY;
+        MessageBoxA(NULL, "Failed to allocate memory for sound...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        goto Exit;
+    }
+
+    dest->buffer.Flags = XAUDIO2_END_OF_STREAM;
+    dest->buffer.AudioBytes = dataChunkSize;
+
+    setFilePointerReturn = SetFilePointer(fileHandle, dataChunkOffset + 8, NULL, FILE_BEGIN);
+    if (setFilePointerReturn == INVALID_SET_FILE_POINTER) {
+        MessageBoxA(NULL, "Failed to set file pointer...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+    readReturnValue = ReadFile(fileHandle, (LPVOID) dest->buffer.pAudioData, dataChunkSize, &bytesRead, NULL);
+    if (readReturnValue == 0) {
+        MessageBoxA(NULL, "Failed to read audio data chunk...", "Error!", MESSAGEBOX_ERROR_STYLE);
+        returnValue = GetLastError();
+        goto Exit;
+    }
+
+Exit:
+
+    if (fileHandle != NULL && fileHandle != INVALID_HANDLE_VALUE) {
+        CloseHandle(fileHandle);
+    }
+    return returnValue;
+}
+
+void PlayGameSound(GAMESOUND* gameSound) {
+    g_SFXSourceVoice[g_SFXSelected]->lpVtbl->SubmitSourceBuffer(g_SFXSourceVoice[g_SFXSelected], &gameSound->buffer, NULL);
+    g_SFXSourceVoice[g_SFXSelected]->lpVtbl->Start(g_SFXSourceVoice[g_SFXSelected], 0, XAUDIO2_COMMIT_NOW);
+    g_SFXSelected++;
+    if (g_SFXSelected > SFX_SOURCE_VOICE_COUNT - 1) {
+        g_SFXSelected = 0;
+    }
 }
 
 uint32_t RandomUInt32(void) {

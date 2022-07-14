@@ -26,12 +26,19 @@
 
 #define FONT_SHEET_CHARACTER_WIDTH	98
 
+#define SFX_SOURCE_VOICE_COUNT		2
+
 typedef unsigned long ul32_t;
 
 typedef struct GAMEBITMAP {
 	BITMAPINFO bitMapInfo;							
 	void* Memory;									//Actual memory buffer (although it's a void pointer, we're interpreting this a pixel buffer)
 } GAMEBITMAP;
+
+typedef struct GAMESOUND {
+	WAVEFORMATEX waveFormat;
+	XAUDIO2_BUFFER buffer;
+} GAMESOUND;
 
 typedef struct GAME_PERFORMANCE_DATA {
 	int64_t frequency;								//Fixed frequency initialized at boot time
@@ -50,6 +57,24 @@ typedef struct GAME_PERFORMANCE_DATA {
 
 	PROCESS_MEMORY_COUNTERS_EX memoryInfo;			//Structure that carries a bunch of information about our program's memory
 } GAME_PERFORMANCE_DATA;
+
+typedef struct GAMEINPUT {
+	int16_t closeKeyIsDown;
+	int16_t debugKeyIsDown;
+	int16_t selectionKeyIsDown;
+	int16_t upKeyIsDown;
+	int16_t downKeyIsDown;
+	int16_t leftKeyIsDown;
+	int16_t rightKeyIsDown;
+
+	BOOL closeKeyWasDown;
+	BOOL debugKeyWasDown;
+	BOOL selectionKeyWasDown;
+	BOOL upKeyWasDown;
+	BOOL downKeyWasDown;
+	BOOL leftKeyWasDown;
+	BOOL rightKeyWasDown;
+} GAMEINPUT;
 
 typedef struct COLOR {
 	uint8_t blue;
@@ -116,8 +141,8 @@ LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParamete
 HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(HWND windowHandle);
-void ProcessInputMenu(void);
-void ProcessInputLevel(void);
+void ProcessInputMenu(HWND windowHandle);
+void ProcessInputLevel(HWND windowHandle);
 void RenderGraphics(HWND windowHandle);
 void DrawBackground(COLOR color);
 void DrawRectangle(RECTANGLE rect, COLOR color);
@@ -130,7 +155,10 @@ void DrawLevel(void);
 PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
 void InitializeMainPlayer(void);
 void InitializeEnemies(void);
+HRESULT InitializeSoundEngine(void);
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
+DWORD LoadWavFromFile(const char* filename, GAMESOUND* dest);
+void PlayGameSound(GAMESOUND* gameSound);
 BOOL RandomBool(void);
 int8_t RandomSign(void);
 uint32_t RandomUInt32(void);
