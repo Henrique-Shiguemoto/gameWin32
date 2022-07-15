@@ -142,7 +142,7 @@ HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(HWND windowHandle);
 void ProcessInputMenu(HWND windowHandle);
-void ProcessInputLevel(HWND windowHandle);
+void ProcessInputLevel(void);
 void RenderGraphics(HWND windowHandle);
 void DrawBackground(COLOR color);
 void DrawRectangle(RECTANGLE rect, COLOR color);
