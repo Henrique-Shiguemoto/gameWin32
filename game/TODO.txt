@@ -1,3 +1,2 @@
-add music
-add logging system (this is just for learning purposes really, the game doesn't need this)
-add game over scene
+add transitions between menu and level, level and game over scene
+add more levels

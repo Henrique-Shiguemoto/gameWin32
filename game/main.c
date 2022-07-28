@@ -29,6 +29,7 @@ GAMESOUND g_ChangeButtonSelectionSound = { 0 };
 GAMESOUND g_ButtonSelectionSound = { 0 };
 GAMESOUND g_MenuSong = { 0 };
 GAMESOUND g_PlayerHitSound = { 0 };
+GAMESOUND g_PlayerDeath = { 0 };
 GAMESOUND g_LevelSong = { 0 };
 
 //Only one song at a time
@@ -39,14 +40,23 @@ IXAudio2SourceVoice* g_SFXSourceVoice[SFX_SOURCE_VOICE_COUNT] = { 0 };
 
 //MENU ITEMS, WE'LL TAKE IT FROM HERE AFTER
 BACKGROUND g_MenuBackground = { 0 };
-MENUITEM g_StartGameButton = { (char*)"Start Game", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2) - 40, StartGameButtonAction };
-MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 60, ControlsButtonAction };
-MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 80, QuitButtonAction };
+MENUITEM g_StartGameButton = { (char*)"Start Game", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2) - 20, StartGameButtonAction };
+MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 40, ControlsButtonAction };
+MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 60, QuitButtonAction };
 MENUITEM* g_MenuItems[] = { &g_StartGameButton, &g_ControlsButton, &g_QuitButton };
 MENU g_Menu = { "Main Menu", 0, _countof(g_MenuItems), g_MenuItems};
 
+MENUITEM g_ControlsBackButton = { (char*) "Back", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 75, ControlsBackButtonAction};
+
 GAMEBITMAP g_MenuFlowerBitmap = { 0 };
 GAMEBITMAP g_MenuBeeBitmap = { 0 };
+
+//GAME OVER MENU
+MENUITEM g_TryAgainGameOverButton = { (char*)"Try Again?", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2), TryAgainGameOverButtonAction};
+MENUITEM g_MainMenuGameOverButton = { (char*)"Main Menu", (GAME_WIDTH / 2) - 27, (GAME_HEIGHT / 2) - 30, MainMenuGameOverButtonAction };
+MENUITEM* g_GameOverMenuItems[] = {&g_TryAgainGameOverButton, &g_MainMenuGameOverButton};
+
+MENU g_GameOverMenu = { "GAME OVER", 0, _countof(g_GameOverMenuItems), g_GameOverMenuItems};
 
 int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandle, PSTR commandLine, int32_t windowFlags)
 {
@@ -130,6 +140,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     LoadWavFromFile("..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
     LoadWavFromFile("..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
     LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
+    LoadWavFromFile("..\\assets\\sounds\\level\\Dying.wav", &g_PlayerDeath);
     LoadWavFromFile("..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
 
     //MainPlayer and Enemies Initialization
@@ -140,14 +151,14 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     float timeElapsedInMicroseconds = 0;
     int64_t start = GetPerformanceCounter();
 
-    PlayGameSound(&g_MenuSong);
+    //PlayGameSound(&g_MenuSong);
 
     while (g_GameState != GS_NOSTATE) {
         
         while (PeekMessageA(&message, windowHandle, 0, 0, PM_REMOVE)) {
             DispatchMessageA(&message);
         }
-        ProcessInput(windowHandle);
+        ProcessInput();
         RenderGraphics(windowHandle);
 
         int64_t end = GetPerformanceCounter();
@@ -190,7 +201,7 @@ Exit:
     return returnValue;
 }
 
-void ProcessInput(HWND windowHandle) {
+void ProcessInput(void) {
     //We don't wanna do any sort of input processing when we're not on focus (this is a temporary solution)
     if (g_GameIsFocused == FALSE) {
         return;
@@ -198,11 +209,19 @@ void ProcessInput(HWND windowHandle) {
     
     switch (g_GameState) {
         case GS_MENU: {
-            ProcessInputMenu(windowHandle);
+            ProcessInputMenu();
             break;
         }
         case GS_LEVEL: {
             ProcessInputLevel();
+            break;
+        }
+        case GS_CONTROLS: {
+            ProcessInputControls();
+            break;
+        }
+        case GS_GAMEOVER: {
+            ProcessInputGameOver();
             break;
         }
         case GS_NOSTATE: {
@@ -214,8 +233,7 @@ void ProcessInput(HWND windowHandle) {
     }    
 }
 
-void ProcessInputMenu(HWND windowHandle) {
-    g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE); //ESC KEY
+void ProcessInputMenu(void) {
     g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB); //TAB KEY
     g_GameInput.upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
     g_GameInput.downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
@@ -223,10 +241,6 @@ void ProcessInputMenu(HWND windowHandle) {
     g_GameInput.rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
     g_GameInput.selectionKeyIsDown = GetAsyncKeyState(VK_RETURN); // ENTER KEY
 
-    if (g_GameInput.closeKeyIsDown && !g_GameInput.closeKeyWasDown) {
-        SendMessageA(windowHandle, WM_CLOSE, 0, 0);
-        g_GameState = GS_NOSTATE;
-    }
     if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
         g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
     }
@@ -270,7 +284,7 @@ void ProcessInputMenu(HWND windowHandle) {
 
 void ProcessInputLevel(void) {
     //Filling GAMEINPUT struct
-    g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE);
+    g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE); //ESC KEY
     g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
     g_GameInput.upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
     g_GameInput.downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
@@ -322,6 +336,69 @@ void ProcessInputLevel(void) {
     g_GameInput.closeKeyWasDown = g_GameInput.closeKeyIsDown;
 }
 
+void ProcessInputControls(void) {
+    //Filling GAMEINPUT struct
+    g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
+    g_GameInput.selectionKeyIsDown = GetAsyncKeyState(VK_RETURN); // ENTER KEY
+
+    if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
+        g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
+    }
+
+    //Button Selection
+    if (g_GameInput.selectionKeyIsDown && !g_GameInput.selectionKeyWasDown) {
+        g_ControlsBackButton.Action();
+        g_Menu.currentSelectedMenuItem = 0;
+        PlayGameSound(&g_ButtonSelectionSound);
+    }
+
+    g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
+    g_GameInput.closeKeyWasDown = g_GameInput.closeKeyIsDown;
+    g_GameInput.selectionKeyWasDown = g_GameInput.selectionKeyIsDown;
+}
+
+void ProcessInputGameOver(void) {
+    g_GameInput.selectionKeyIsDown = GetAsyncKeyState(VK_RETURN); // ENTER KEY
+    g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
+    g_GameInput.upKeyIsDown = GetAsyncKeyState(0x57) | GetAsyncKeyState(VK_UP); // 'W' KEY OR UP KEY
+    g_GameInput.downKeyIsDown = GetAsyncKeyState(0x53) | GetAsyncKeyState(VK_DOWN); // 'S' KEY OR DOWN KEY
+    
+    if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
+        g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
+    }
+
+    //Change Button Selection
+    if (g_GameInput.upKeyIsDown && !g_GameInput.upKeyWasDown) {
+        if (g_GameOverMenu.currentSelectedMenuItem <= 0) {
+            g_GameOverMenu.currentSelectedMenuItem = 0;
+        }
+        else {
+            g_GameOverMenu.currentSelectedMenuItem--;
+            PlayGameSound(&g_ChangeButtonSelectionSound);
+        }
+    }
+    if (g_GameInput.downKeyIsDown && !g_GameInput.downKeyWasDown) {
+        if (g_GameOverMenu.currentSelectedMenuItem >= g_GameOverMenu.itemCount - 1) {
+            g_GameOverMenu.currentSelectedMenuItem = g_GameOverMenu.itemCount - 1;
+        }
+        else {
+            g_GameOverMenu.currentSelectedMenuItem++;
+            PlayGameSound(&g_ChangeButtonSelectionSound);
+        }
+    }
+
+    //Button Selection
+    if (g_GameInput.selectionKeyIsDown && !g_GameInput.selectionKeyWasDown) {
+        g_GameOverMenu.items[g_GameOverMenu.currentSelectedMenuItem]->Action();
+        PlayGameSound(&g_ButtonSelectionSound);
+    }
+
+    g_GameInput.upKeyWasDown = g_GameInput.upKeyIsDown;
+    g_GameInput.downKeyWasDown = g_GameInput.downKeyIsDown;
+    g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
+    g_GameInput.selectionKeyWasDown = g_GameInput.selectionKeyIsDown;
+}
+
 void RenderGraphics(HWND windowHandle) {
     //We need the device context for StrechDIBits
     HDC deviceContext = GetDC(windowHandle);
@@ -333,6 +410,14 @@ void RenderGraphics(HWND windowHandle) {
         }
         case GS_LEVEL: {
             DrawLevel();
+            break;
+        }
+        case GS_CONTROLS: {
+            DrawControls();
+            break;
+        }
+        case GS_GAMEOVER: {
+            DrawGameOver();
             break;
         }
         case GS_NOSTATE: {
@@ -1215,6 +1300,8 @@ void DrawMenu(void) {
 }
 
 void DrawLevel(void) {
+    static int8_t timesDied = 0;
+
     //Drawing Background
     DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
 
@@ -1236,6 +1323,7 @@ void DrawLevel(void) {
         //collision checking should also probably not be in rendering
         if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
             playerCollided = TRUE;
+            timesDied++;
             PlayGameSound(&g_PlayerHitSound);
         }
         //Drawing enemy
@@ -1246,11 +1334,20 @@ void DrawLevel(void) {
         g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
     }
 
-    //Reloading the level if the player collided with one enemy at least
-    if (playerCollided == TRUE) {
+
+    //Reloading the level in case the player collides with an enemy
+    if (playerCollided == TRUE && timesDied < g_MainPlayer.tries) {
         InitializeMainPlayer();
         InitializeEnemies();
         g_Timer = 0;
+    }
+    //Checking to see if the player has any tries left
+    else if (timesDied >= g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies();
+        timesDied = 0;
+        g_GameState = GS_GAMEOVER;
+        PlayGameSound(&g_PlayerDeath);
     }
 
     //Drawing Header Rectangle
@@ -1292,6 +1389,89 @@ void DrawLevel(void) {
 
         sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
         DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "PLAYER TRIES: %i", g_MainPlayer.tries);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 65, debugStringColor);
+    }
+#endif
+}
+
+void DrawControls(void) {
+    //Drawing background
+    DrawBitmap(&g_MenuBackground.background, 0.0, 0.0);
+
+    //Drawing Game Name
+    DrawString(GAME_NAME, &g_Font, (GAME_WIDTH / 2) - 33, GAME_HEIGHT - 100, (COLOR) { 0 });
+
+    //Drawing Flower and Bee
+    DrawBitmap(&g_MenuFlowerBitmap, (GAME_WIDTH / 4) - 32, GAME_HEIGHT / 2);
+    DrawBitmap(&g_MenuBeeBitmap, (3 * GAME_WIDTH / 4) - 32, GAME_HEIGHT / 2);
+
+    //Drawing "Controls"
+    DrawString("Controls", &g_Font, (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) + 50, (COLOR) { 0 });
+
+    //Drawing the controls
+    DrawString("W : Up", &g_Font, (GAME_WIDTH / 2) - 18, (GAME_HEIGHT / 2), (COLOR) { 0 });
+    DrawString("S : Down", &g_Font, (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 10, (COLOR) { 0 });
+    DrawString("A : Right", &g_Font, (GAME_WIDTH / 2) - 27, (GAME_HEIGHT / 2) - 20, (COLOR) { 0 });
+    DrawString("D : Left", &g_Font, (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 30, (COLOR) { 0 });
+
+    //Draw back button
+    DrawString(g_ControlsBackButton.name, &g_Font, g_ControlsBackButton.minX, g_ControlsBackButton.minY, (COLOR) {0});
+
+    //Draw ">"
+    DrawString(">", &g_Font, g_ControlsBackButton.minX - 15, g_ControlsBackButton.minY, (COLOR) { 0 });
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
+    }
+#endif
+}
+
+void DrawGameOver(void) {
+    //Drawing Background (All black for now)
+    DrawBackground((COLOR) {0});
+
+    //Drawing "GAME OVER" text
+    DrawString("GAME OVER", &g_Font, (GAME_WIDTH / 2) - 27, (GAME_HEIGHT / 2) + 60, (COLOR) {0xFF, 0xFF, 0xFF});
+
+    //Drawing buttons
+    for (int8_t i = 0; i < g_GameOverMenu.itemCount; i++) {
+        MENUITEM* item = g_GameOverMenu.items[i];
+        DrawString(item->name, &g_Font, item->minX, item->minY, (COLOR) { 0xFF, 0xFF, 0xFF });
+    }
+
+    //Drawing ">"
+    DrawString(">", &g_Font, g_GameOverMenu.items[g_GameOverMenu.currentSelectedMenuItem]->minX - 15, g_GameOverMenu.items[g_GameOverMenu.currentSelectedMenuItem]->minY, (COLOR) { 0xFF, 0xFF, 0xFF });
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
     }
 #endif
 }
@@ -1316,6 +1496,7 @@ void InitializeMainPlayer(void) {
     g_MainPlayer.speedY = 2;
     g_MainPlayer.rect.width = 16;
     g_MainPlayer.rect.height = 16;
+    g_MainPlayer.tries = 3;
 }
 
 void InitializeEnemies(void) {
@@ -1691,11 +1872,23 @@ void StartGameButtonAction(void) {
 }
 
 void ControlsButtonAction(void) {
-    //Draw Controls window
+    g_GameState = GS_CONTROLS;
 }
 
 void QuitButtonAction(void) {
     g_GameState = GS_NOSTATE;
+}
+
+void ControlsBackButtonAction(void) {
+    g_GameState = GS_MENU;
+}
+
+void TryAgainGameOverButtonAction(void) {
+    g_GameState = GS_LEVEL;
+}
+
+void MainMenuGameOverButtonAction(void) {
+    g_GameState = GS_MENU;
 }
 
 BOOL GameIsRunning(void) {
