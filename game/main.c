@@ -9,6 +9,7 @@
 #include "main.h"
 
 GAMESTATE g_GameState = GS_NOSTATE;
+GAMESTATE g_LastGameState = GS_NOSTATE;
 BOOL g_GameIsFocused = TRUE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
@@ -19,37 +20,33 @@ GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
 RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT - 15};
 uint32_t g_Seed = 0;
+
+//Audio
 GAMEINPUT g_GameInput = { 0 };
 IXAudio2* g_GameAudio = { 0 };
 IXAudio2MasteringVoice* g_MasterVoice = { 0 };
 uint8_t g_SFXSelected = 0;
-float g_SFXVolume = 0.5;
-float g_MusicVolume = 0.5;
+float g_SFXVolume = 0.3f;
+float g_MusicVolume = 0.3f;
 GAMESOUND g_ChangeButtonSelectionSound = { 0 };
 GAMESOUND g_ButtonSelectionSound = { 0 };
 GAMESOUND g_MenuSong = { 0 };
 GAMESOUND g_PlayerHitSound = { 0 };
 GAMESOUND g_PlayerDeath = { 0 };
 GAMESOUND g_LevelSong = { 0 };
-
-//Only one song at a time
 IXAudio2SourceVoice* g_MusicSourceVoice = { 0 };
-
-//We can have up to 4 sound effects at a time
 IXAudio2SourceVoice* g_SFXSourceVoice[SFX_SOURCE_VOICE_COUNT] = { 0 };
 
 //MENU ITEMS, WE'LL TAKE IT FROM HERE AFTER
 BACKGROUND g_MenuBackground = { 0 };
+GAMEBITMAP g_MenuFlowerBitmap = { 0 };
+GAMEBITMAP g_MenuBeeBitmap = { 0 };
 MENUITEM g_StartGameButton = { (char*)"Start Game", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2) - 20, StartGameButtonAction };
 MENUITEM g_ControlsButton = { (char*)"Controls", (GAME_WIDTH / 2) - 24, (GAME_HEIGHT / 2) - 40, ControlsButtonAction };
 MENUITEM g_QuitButton = { (char*)"Quit", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 60, QuitButtonAction };
 MENUITEM* g_MenuItems[] = { &g_StartGameButton, &g_ControlsButton, &g_QuitButton };
 MENU g_Menu = { "Main Menu", 0, _countof(g_MenuItems), g_MenuItems};
-
 MENUITEM g_ControlsBackButton = { (char*) "Back", (GAME_WIDTH / 2) - 12, (GAME_HEIGHT / 2) - 75, ControlsBackButtonAction};
-
-GAMEBITMAP g_MenuFlowerBitmap = { 0 };
-GAMEBITMAP g_MenuBeeBitmap = { 0 };
 
 //GAME OVER MENU
 MENUITEM g_TryAgainGameOverButton = { (char*)"Try Again?", (GAME_WIDTH / 2) - 30, (GAME_HEIGHT / 2), TryAgainGameOverButtonAction};
@@ -96,7 +93,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     //Getting the fixed clock frequency
     g_PerformanceData.frequency = GetPerformanceFrequency();
 
-    //Setting the game to start in the starting menu
+    //Setting the game to start in the starting menu (no need to set g_LastGameState)
     g_GameState = GS_MENU;
 
     //Setting Debug info display toggle
@@ -140,7 +137,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
     LoadWavFromFile("..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
     LoadWavFromFile("..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
     LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
-    LoadWavFromFile("..\\assets\\sounds\\level\\Dying.wav", &g_PlayerDeath);
+    LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt2.wav", &g_PlayerDeath);
     LoadWavFromFile("..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
 
     //MainPlayer and Enemies Initialization
@@ -224,6 +221,10 @@ void ProcessInput(void) {
             ProcessInputGameOver();
             break;
         }
+        case GS_TRANSITION: {
+            ProcessInputTransition();
+            break;
+        }
         case GS_NOSTATE: {
             return;
         }
@@ -292,6 +293,7 @@ void ProcessInputLevel(void) {
     g_GameInput.rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
 
     if (g_GameInput.closeKeyIsDown && !g_GameInput.closeKeyWasDown) {
+        g_LastGameState = GS_LEVEL;
         g_GameState = GS_MENU;
     }
     if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
@@ -399,6 +401,17 @@ void ProcessInputGameOver(void) {
     g_GameInput.selectionKeyWasDown = g_GameInput.selectionKeyIsDown;
 }
 
+void ProcessInputTransition(void) {
+    g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
+
+    //In between transitions we'll only be able to hit the debug key
+    if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
+        g_PerformanceData.displayDebugInfo = !g_PerformanceData.displayDebugInfo;
+    }
+
+    g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
+}
+
 void RenderGraphics(HWND windowHandle) {
     //We need the device context for StrechDIBits
     HDC deviceContext = GetDC(windowHandle);
@@ -418,6 +431,10 @@ void RenderGraphics(HWND windowHandle) {
         }
         case GS_GAMEOVER: {
             DrawGameOver();
+            break;
+        }
+        case GS_TRANSITION: {
+            DrawTransition();
             break;
         }
         case GS_NOSTATE: {
@@ -1346,7 +1363,8 @@ void DrawLevel(void) {
         InitializeMainPlayer();
         InitializeEnemies();
         timesDied = 0;
-        g_GameState = GS_GAMEOVER;
+        g_LastGameState = GS_LEVEL;
+        g_GameState = GS_TRANSITION;
         PlayGameSound(&g_PlayerDeath);
     }
 
@@ -1456,6 +1474,71 @@ void DrawGameOver(void) {
 
     //Drawing ">"
     DrawString(">", &g_Font, g_GameOverMenu.items[g_GameOverMenu.currentSelectedMenuItem]->minX - 15, g_GameOverMenu.items[g_GameOverMenu.currentSelectedMenuItem]->minY, (COLOR) { 0xFF, 0xFF, 0xFF });
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
+    }
+#endif
+}
+
+void DrawTransition(void) {
+    static int32_t upBarRow = GAME_HEIGHT - 1;
+    static int32_t downBarRow = 0;
+    int32_t barIncrement = 3;
+
+    //Draw lines in the up bar and down bar
+    DrawRectangle((RECTANGLE) { 0, (float)upBarRow, GAME_WIDTH, (float)(GAME_HEIGHT - upBarRow)}, (COLOR) { 0 });
+    DrawRectangle((RECTANGLE) { 0, 0, GAME_WIDTH, (float)downBarRow}, (COLOR) { 0 });
+
+    if(downBarRow >= (GAME_HEIGHT / 2)) {
+        //We have transitions from the menu to the levels and from the levels to the game over scene
+        //but we'll probably add more cases here because we'll want transitions between levels
+        switch (g_LastGameState) {
+            case GS_MENU: {
+                g_LastGameState = GS_TRANSITION;
+                g_GameState = GS_LEVEL;
+                break;
+            }
+            case GS_LEVEL: {
+                g_LastGameState = GS_TRANSITION;
+                g_GameState = GS_GAMEOVER;
+                break;
+            }
+            case GS_CONTROLS: {
+                break;
+            }
+            case GS_GAMEOVER: {
+                break;
+            }
+            case GS_TRANSITION: {
+                break;
+            }
+            case GS_NOSTATE: {
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+        upBarRow = GAME_HEIGHT - 1;
+        downBarRow = 0;
+    }
+
+    upBarRow = upBarRow - barIncrement;
+    downBarRow = downBarRow + barIncrement;
 
 #ifdef _DEBUG
     //Drawing debug code
@@ -1868,26 +1951,32 @@ float Clamp32(float min, float max, float value) {
 }
 
 void StartGameButtonAction(void) {
-    g_GameState = GS_LEVEL;
+    g_LastGameState = GS_MENU;
+    g_GameState = GS_TRANSITION;
 }
 
 void ControlsButtonAction(void) {
+    g_LastGameState = GS_MENU;
     g_GameState = GS_CONTROLS;
 }
 
 void QuitButtonAction(void) {
+    g_LastGameState = GS_MENU;
     g_GameState = GS_NOSTATE;
 }
 
 void ControlsBackButtonAction(void) {
+    g_LastGameState = GS_CONTROLS;
     g_GameState = GS_MENU;
 }
 
 void TryAgainGameOverButtonAction(void) {
+    g_LastGameState = GS_GAMEOVER;
     g_GameState = GS_LEVEL;
 }
 
 void MainMenuGameOverButtonAction(void) {
+    g_LastGameState = GS_GAMEOVER;
     g_GameState = GS_MENU;
 }
 

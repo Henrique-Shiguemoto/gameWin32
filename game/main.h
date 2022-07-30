@@ -136,6 +136,7 @@ typedef enum GAMESTATE {
 	GS_LEVEL,
 	GS_CONTROLS,
 	GS_GAMEOVER,
+	GS_TRANSITION,
 	GS_NOSTATE
 } GAMESTATE;
 
@@ -147,6 +148,7 @@ void ProcessInputMenu(void);
 void ProcessInputLevel(void);
 void ProcessInputControls(void);
 void ProcessInputGameOver(void);
+void ProcessInputTransition(void);
 void RenderGraphics(HWND windowHandle);
 void DrawBackground(COLOR color);
 void DrawRectangle(RECTANGLE rect, COLOR color);
@@ -158,6 +160,7 @@ void DrawMenu(void);
 void DrawLevel(void);
 void DrawControls(void);
 void DrawGameOver(void);
+void DrawTransition(void);
 PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
 void InitializeMainPlayer(void);
 void InitializeEnemies(void);

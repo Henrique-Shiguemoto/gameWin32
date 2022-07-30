@@ -1,2 +1,2 @@
-add transitions between menu and level, level and game over scene
+create a win condition for the player (we have a lose condition already with the "tries" variable)
 add more levels
