@@ -1,2 +1,6 @@
 create a win condition for the player (we have a lose condition already with the "tries" variable)
+	- Have a static uint64_t localFrameCount variable and so on (start the level static and then let it start after a countdown that
+		says something like "Don't let the bees touch you! Survive for x seconds!")
 add more levels
+add music to each level (make it loop)
+add fps independent movement

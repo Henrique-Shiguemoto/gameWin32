@@ -116,29 +116,7 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
     g_LevelBackground.rect = g_PlayableArea;
 
-    //Loading all bitmaps
-    LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
-    LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
-    LoadBitmapFromFile("..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
-    LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
-    LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
-    LoadBitmapFromFile("..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
-    for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
-
-    //Initializing sound engine
-    HRESULT soundEngineReturn = InitializeSoundEngine();
-    if (FAILED(soundEngineReturn)) {
-        MessageBoxA(NULL, "Failed to initialize sound engine...", "Error", MESSAGEBOX_ERROR_STYLE);
-        goto Exit;
-    }
-
-    //Loading all sounds
-    LoadWavFromFile("..\\assets\\sounds\\menu\\Change_Button_Selection.wav", &g_ChangeButtonSelectionSound);
-    LoadWavFromFile("..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
-    LoadWavFromFile("..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
-    LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
-    LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt2.wav", &g_PlayerDeath);
-    LoadWavFromFile("..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
+    LoadAssets();
 
     //MainPlayer and Enemies Initialization
     InitializeMainPlayer();
@@ -1885,6 +1863,60 @@ Exit:
     if (fileHandle != NULL && fileHandle != INVALID_HANDLE_VALUE) {
         CloseHandle(fileHandle);
     }
+    return returnValue;
+}
+
+DWORD LoadAssets(void) {
+    DWORD returnValue = EXIT_SUCCESS;
+    
+    //Initializing sound engine
+    HRESULT soundEngineReturn = InitializeSoundEngine();
+    if (FAILED(soundEngineReturn)) {
+        MessageBoxA(NULL, "Failed to initialize sound engine...", "Error", MESSAGEBOX_ERROR_STYLE);
+        returnValue = EXIT_FAILURE;
+        goto Exit;
+    }
+
+    if (IsDebuggerPresent() != 0) {
+        //Loading all sounds
+        LoadWavFromFile("..\\assets\\sounds\\menu\\Change_Button_Selection.wav", &g_ChangeButtonSelectionSound);
+        LoadWavFromFile("..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
+        LoadWavFromFile("..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
+        LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
+        LoadWavFromFile("..\\assets\\sounds\\level\\Hit_Hurt2.wav", &g_PlayerDeath);
+        LoadWavFromFile("..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
+
+        //Loading all bitmaps
+        LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
+        LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
+        LoadBitmapFromFile("..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
+        LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
+        LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
+        LoadBitmapFromFile("..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
+        for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+    }
+    else {
+        //Loading all sounds
+        LoadWavFromFile("..\\..\\assets\\sounds\\menu\\Change_Button_Selection.wav", &g_ChangeButtonSelectionSound);
+        LoadWavFromFile("..\\..\\assets\\sounds\\menu\\Button_Selection.wav", &g_ButtonSelectionSound);
+        LoadWavFromFile("..\\..\\assets\\sounds\\menu\\Song4.wav", &g_MenuSong);
+        LoadWavFromFile("..\\..\\assets\\sounds\\level\\Hit_Hurt1.wav", &g_PlayerHitSound);
+        LoadWavFromFile("..\\..\\assets\\sounds\\level\\Hit_Hurt2.wav", &g_PlayerDeath);
+        LoadWavFromFile("..\\..\\assets\\sounds\\level\\QuickBact1.wav", &g_LevelSong);
+
+        //Loading all bitmaps
+        LoadBitmapFromFile("..\\..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
+        LoadBitmapFromFile("..\\..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
+        LoadBitmapFromFile("..\\..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
+        LoadBitmapFromFile("..\\..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
+        LoadBitmapFromFile("..\\..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
+        LoadBitmapFromFile("..\\..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
+        for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+    }
+    
+
+Exit:
+
     return returnValue;
 }
 

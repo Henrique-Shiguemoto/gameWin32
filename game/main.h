@@ -167,6 +167,7 @@ void InitializeEnemies(void);
 HRESULT InitializeSoundEngine(void);
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
 DWORD LoadWavFromFile(const char* filename, GAMESOUND* dest);
+DWORD LoadAssets(void);
 void PlayGameSound(GAMESOUND* gameSound);
 BOOL RandomBool(void);
 int8_t RandomSign(void);
