@@ -10,16 +10,17 @@
 
 GAMESTATE g_GameState = GS_NOSTATE;
 GAMESTATE g_LastGameState = GS_NOSTATE;
+GAMESTATE g_LastLevelState = GS_NOSTATE;
 BOOL g_GameIsFocused = TRUE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
-ENEMY g_Enemies[ENEMY_COUNT] = { 0 };
 BACKGROUND g_LevelBackground = { 0 };
 GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
 RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT - 15};
 uint32_t g_Seed = 0;
+LEVEL g_Levels[LEVEL_COUNT] = { 0 };
 
 //Audio
 GAMEINPUT g_GameInput = { 0 };
@@ -113,20 +114,19 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         returnValue = EXIT_FAILURE;
         goto Exit;
     }
-
     g_LevelBackground.rect = g_PlayableArea;
 
-    LoadAssets();
-
-    //MainPlayer and Enemies Initialization
-    InitializeMainPlayer();
-    InitializeEnemies();
+    //Initialize Levels (this includes main player and enemies initialization)
+    InitializeLevels();
+    
+    //We need to initialize the levels before loading assets
+    LoadAssets();    
 
     //Frame Processing
     float timeElapsedInMicroseconds = 0;
     int64_t start = GetPerformanceCounter();
 
-    //PlayGameSound(&g_MenuSong);
+    PlayGameSound(&g_MenuSong);
 
     while (g_GameState != GS_NOSTATE) {
         
@@ -162,7 +162,9 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
 
         //Updating our amount of frames
         g_PerformanceData.totalRawFramesRendered++;
-        if (g_GameState == GS_LEVEL) {
+
+        //We only update the global timer is we're in a level
+        if (g_GameState == GS_LEVEL1 || g_GameState == GS_LEVEL2 || g_GameState == GS_LEVEL3 || g_GameState == GS_LEVEL4) {
             g_Timer += (uint64_t)timeElapsedInMicroseconds;
         }
 
@@ -187,8 +189,20 @@ void ProcessInput(void) {
             ProcessInputMenu();
             break;
         }
-        case GS_LEVEL: {
-            ProcessInputLevel();
+        case GS_LEVEL1: {
+            ProcessInputLevel1();
+            break;
+        }
+        case GS_LEVEL2: {
+            ProcessInputLevel2();
+            break;
+        }
+        case GS_LEVEL3: {
+            ProcessInputLevel3();
+            break;
+        }
+        case GS_LEVEL4: {
+            ProcessInputLevel4();
             break;
         }
         case GS_CONTROLS: {
@@ -201,6 +215,10 @@ void ProcessInput(void) {
         }
         case GS_TRANSITION: {
             ProcessInputTransition();
+            break;
+        }
+        case GS_LEVELNOTPLAYABLE: {
+            ProcessInputLevelNotPlayable();
             break;
         }
         case GS_NOSTATE: {
@@ -261,7 +279,7 @@ void ProcessInputMenu(void) {
     g_GameInput.selectionKeyWasDown = g_GameInput.selectionKeyIsDown;
 }
 
-void ProcessInputLevel(void) {
+void ProcessInputLevel1(void) {
     //Filling GAMEINPUT struct
     g_GameInput.closeKeyIsDown = GetAsyncKeyState(VK_ESCAPE); //ESC KEY
     g_GameInput.debugKeyIsDown = GetAsyncKeyState(VK_TAB);
@@ -271,7 +289,8 @@ void ProcessInputLevel(void) {
     g_GameInput.rightKeyIsDown = GetAsyncKeyState(0x44) | GetAsyncKeyState(VK_RIGHT); // 'D' KEY OR RIGHT KEY
 
     if (g_GameInput.closeKeyIsDown && !g_GameInput.closeKeyWasDown) {
-        g_LastGameState = GS_LEVEL;
+        g_LastLevelState = GS_LEVEL1;
+        g_LastGameState = GS_LEVEL1;
         g_GameState = GS_MENU;
     }
     if (g_GameInput.debugKeyIsDown && !g_GameInput.debugKeyWasDown) {
@@ -314,6 +333,18 @@ void ProcessInputLevel(void) {
 
     g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
     g_GameInput.closeKeyWasDown = g_GameInput.closeKeyIsDown;
+}
+
+void ProcessInputLevel2(void) {
+    ProcessInputLevel1();
+}
+
+void ProcessInputLevel3(void) {
+    ProcessInputLevel1();
+}
+
+void ProcessInputLevel4(void) {
+    ProcessInputLevel1();
 }
 
 void ProcessInputControls(void) {
@@ -390,6 +421,10 @@ void ProcessInputTransition(void) {
     g_GameInput.debugKeyWasDown = g_GameInput.debugKeyIsDown;
 }
 
+void ProcessInputLevelNotPlayable(void) {
+
+}
+
 void RenderGraphics(HWND windowHandle) {
     //We need the device context for StrechDIBits
     HDC deviceContext = GetDC(windowHandle);
@@ -399,8 +434,20 @@ void RenderGraphics(HWND windowHandle) {
             DrawMenu();
             break;
         }
-        case GS_LEVEL: {
-            DrawLevel();
+        case GS_LEVEL1: {
+            DrawLevel1();
+            break;
+        }
+        case GS_LEVEL2: {
+            DrawLevel2();
+            break;
+        }
+        case GS_LEVEL3: {
+            DrawLevel3();
+            break;
+        }
+        case GS_LEVEL4: {
+            DrawLevel4();
             break;
         }
         case GS_CONTROLS: {
@@ -413,6 +460,10 @@ void RenderGraphics(HWND windowHandle) {
         }
         case GS_TRANSITION: {
             DrawTransition();
+            break;
+        }
+        case GS_LEVELNOTPLAYABLE: {
+            DrawLevelNotPlayable();
             break;
         }
         case GS_NOSTATE: {
@@ -1294,7 +1345,7 @@ void DrawMenu(void) {
 #endif
 }
 
-void DrawLevel(void) {
+void DrawLevel1(void) {
     static int8_t timesDied = 0;
 
     //Drawing Background
@@ -1303,45 +1354,54 @@ void DrawLevel(void) {
     //Drawing main player
     DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
 
+    //Check if the player survived enough time already, before checking for collisions (hard coded for now)
+    if (g_Timer / 1000000 >= g_Levels[0].timeMax) {
+        g_LastLevelState = GS_LEVEL1;
+        g_LastGameState = GS_LEVEL1;
+        g_GameState = GS_TRANSITION;
+        return;
+    }
+
     //Drawing Enemies
     BOOL playerCollided = FALSE;
-    for (uint32_t i = 0; i < ENEMY_COUNT; i++)
+    for (uint32_t i = 0; i < g_Levels[0].enemyCount; i++)
     {
         //Checking if they're colliding with the "walls" of the window
-        if ((g_Enemies[i].rect.x + g_Enemies[i].rect.width >= g_PlayableArea.width) || (g_Enemies[i].rect.x <= g_PlayableArea.x)) {
-            g_Enemies[i].speedX = g_Enemies[i].speedX * (-1);
+        if ((g_Levels[0].enemies[i].rect.x + g_Levels[0].enemies[i].rect.width >= g_PlayableArea.width) || (g_Levels[0].enemies[i].rect.x <= g_PlayableArea.x)) {
+            g_Levels[0].enemies[i].speedX = g_Levels[0].enemies[i].speedX * (-1);
         }
-        if ((g_Enemies[i].rect.y + g_Enemies[i].rect.height >= g_PlayableArea.height) || (g_Enemies[i].rect.y <= g_PlayableArea.y)) {
-            g_Enemies[i].speedY = g_Enemies[i].speedY * (-1);
+        if ((g_Levels[0].enemies[i].rect.y + g_Levels[0].enemies[i].rect.height >= g_PlayableArea.height) || (g_Levels[0].enemies[i].rect.y <= g_PlayableArea.y)) {
+            g_Levels[0].enemies[i].speedY = g_Levels[0].enemies[i].speedY * (-1);
         }
 
         //collision checking should also probably not be in rendering
-        if (IsColliding(g_MainPlayer.rect, g_Enemies[i].rect) == TRUE) {
+        if (IsColliding(g_MainPlayer.rect, g_Levels[0].enemies[i].rect) == TRUE) {
             playerCollided = TRUE;
             timesDied++;
             PlayGameSound(&g_PlayerHitSound);
         }
         //Drawing enemy
-        DrawBitmapInPlayableArea(&g_Enemies[i].sprite, g_Enemies[i].rect.x, g_Enemies[i].rect.y);
+        DrawBitmapInPlayableArea(&g_Levels[0].enemies[i].sprite, g_Levels[0].enemies[i].rect.x, g_Levels[0].enemies[i].rect.y);
 
         //Adding the enemy speed to the enemy's position
-        g_Enemies[i].rect.x = g_Enemies[i].rect.x + g_Enemies[i].speedX;
-        g_Enemies[i].rect.y = g_Enemies[i].rect.y + g_Enemies[i].speedY;
+        g_Levels[0].enemies[i].rect.x = g_Levels[0].enemies[i].rect.x + g_Levels[0].enemies[i].speedX;
+        g_Levels[0].enemies[i].rect.y = g_Levels[0].enemies[i].rect.y + g_Levels[0].enemies[i].speedY;
     }
 
 
     //Reloading the level in case the player collides with an enemy
     if (playerCollided == TRUE && timesDied < g_MainPlayer.tries) {
         InitializeMainPlayer();
-        InitializeEnemies();
+        InitializeEnemies(g_Levels[0].enemies, g_Levels[0].enemyCount);
         g_Timer = 0;
     }
     //Checking to see if the player has any tries left
     else if (timesDied >= g_MainPlayer.tries) {
         InitializeMainPlayer();
-        InitializeEnemies();
+        InitializeEnemies(g_Levels[0].enemies, g_Levels[0].enemyCount);
         timesDied = 0;
-        g_LastGameState = GS_LEVEL;
+        g_LastLevelState = GS_LEVEL1;
+        g_LastGameState = GS_LEVEL1;
         g_GameState = GS_TRANSITION;
         PlayGameSound(&g_PlayerDeath);
     }
@@ -1349,11 +1409,11 @@ void DrawLevel(void) {
     //Drawing Header Rectangle
     DrawRectangle((RECTANGLE) { 0, GAME_HEIGHT - 15, GAME_WIDTH, 15 }, (COLOR) { 0x0 });
 
-    //Drawing the name of the game
-    char gameNameString[20];
-    COLOR gameNameStringColor = { 0xFF, 0xFF, 0xFF };
-    sprintf_s(gameNameString, _countof(gameNameString), GAME_NAME);
-    DrawString(gameNameString, &g_Font, 5, GAME_HEIGHT - 10, gameNameStringColor);
+    //Drawing the player's tries left
+    char playerTriesLeftString[20];
+    COLOR playerTriesLeftStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(playerTriesLeftString, _countof(playerTriesLeftString), "Tries Left: %i", (int32_t)(g_MainPlayer.tries - timesDied));
+    DrawString(playerTriesLeftString, &g_Font, 5, GAME_HEIGHT - 10, playerTriesLeftStringColor);
 
     //Drawing Current Timer
     char timerString[20];
@@ -1380,14 +1440,311 @@ void DrawLevel(void) {
         sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
         DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
 
-        sprintf_s(debugString, _countof(debugString), "PLAYER POSITION: (%.1f, %.1f)", g_MainPlayer.rect.x, g_MainPlayer.rect.y);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 45, debugStringColor);
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+    }
+#endif
+}
+
+void DrawLevel2(void) {
+    static int8_t timesDied = 0;
+
+    //Drawing Background
+    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+
+    //Drawing main player
+    DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
+
+    //Check if the player survived enough time already, before checking for collisions (hard coded for now)
+    if (g_Timer / 1000000 >= g_Levels[1].timeMax) {
+        g_LastLevelState = GS_LEVEL2;
+        g_LastGameState = GS_LEVEL2;
+        g_GameState = GS_TRANSITION;
+        return;
+    }
+
+    //Drawing Enemies
+    BOOL playerCollided = FALSE;
+    for (uint32_t i = 0; i < g_Levels[1].enemyCount; i++)
+    {
+        //Checking if they're colliding with the "walls" of the window
+        if ((g_Levels[1].enemies[i].rect.x + g_Levels[1].enemies[i].rect.width >= g_PlayableArea.width) || (g_Levels[1].enemies[i].rect.x <= g_PlayableArea.x)) {
+            g_Levels[1].enemies[i].speedX = g_Levels[1].enemies[i].speedX * (-1);
+        }
+        if ((g_Levels[1].enemies[i].rect.y + g_Levels[1].enemies[i].rect.height >= g_PlayableArea.height) || (g_Levels[1].enemies[i].rect.y <= g_PlayableArea.y)) {
+            g_Levels[1].enemies[i].speedY = g_Levels[1].enemies[i].speedY * (-1);
+        }
+
+        //collision checking should also probably not be in rendering
+        if (IsColliding(g_MainPlayer.rect, g_Levels[1].enemies[i].rect) == TRUE) {
+            playerCollided = TRUE;
+            timesDied++;
+            PlayGameSound(&g_PlayerHitSound);
+        }
+        //Drawing enemy
+        DrawBitmapInPlayableArea(&g_Levels[1].enemies[i].sprite, g_Levels[1].enemies[i].rect.x, g_Levels[1].enemies[i].rect.y);
+
+        //Adding the enemy speed to the enemy's position
+        g_Levels[1].enemies[i].rect.x = g_Levels[1].enemies[i].rect.x + g_Levels[1].enemies[i].speedX;
+        g_Levels[1].enemies[i].rect.y = g_Levels[1].enemies[i].rect.y + g_Levels[1].enemies[i].speedY;
+    }
+
+
+    //Reloading the level in case the player collides with an enemy
+    if (playerCollided == TRUE && timesDied < g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[1].enemies, g_Levels[1].enemyCount);
+        g_Timer = 0;
+    }
+    //Checking to see if the player has any tries left
+    else if (timesDied >= g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[1].enemies, g_Levels[1].enemyCount);
+        timesDied = 0;
+        g_LastLevelState = GS_LEVEL2;
+        g_LastGameState = GS_LEVEL2;
+        g_GameState = GS_TRANSITION;
+        PlayGameSound(&g_PlayerDeath);
+    }
+
+    //Drawing Header Rectangle
+    DrawRectangle((RECTANGLE) { 0, GAME_HEIGHT - 15, GAME_WIDTH, 15 }, (COLOR) { 0x0 });
+
+    //Drawing the player's tries left
+    char playerTriesLeftString[20];
+    COLOR playerTriesLeftStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(playerTriesLeftString, _countof(playerTriesLeftString), "Tries Left: %i", (int32_t)(g_MainPlayer.tries - timesDied));
+    DrawString(playerTriesLeftString, &g_Font, 5, GAME_HEIGHT - 10, playerTriesLeftStringColor);
+
+    //Drawing Current Timer
+    char timerString[20];
+    COLOR timerStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
+    DrawString(timerString, &g_Font, GAME_WIDTH / 2 - 30, GAME_HEIGHT - 10, timerStringColor);
+
+    //Drawing "Main Menu: Esc"
+    char pauseString[15];
+    COLOR pauseStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(pauseString, _countof(pauseString), "Main Menu: Esc");
+    DrawString(pauseString, &g_Font, GAME_WIDTH - 82, GAME_HEIGHT - 10, pauseStringColor);
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
 
         sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
         DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+    }
+#endif
+}
 
-        sprintf_s(debugString, _countof(debugString), "PLAYER TRIES: %i", g_MainPlayer.tries);
-        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 65, debugStringColor);
+void DrawLevel3(void) {
+    static int8_t timesDied = 0;
+
+    //Drawing Background
+    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+
+    //Drawing main player
+    DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
+
+    //Check if the player survived enough time already, before checking for collisions (hard coded for now)
+    if (g_Timer / 1000000 >= g_Levels[2].timeMax) {
+        g_LastLevelState = GS_LEVEL3;
+        g_LastGameState = GS_LEVEL3;
+        g_GameState = GS_TRANSITION;
+        return;
+    }
+
+    //Drawing Enemies
+    BOOL playerCollided = FALSE;
+    for (uint32_t i = 0; i < g_Levels[2].enemyCount; i++)
+    {
+        //Checking if they're colliding with the "walls" of the window
+        if ((g_Levels[2].enemies[i].rect.x + g_Levels[2].enemies[i].rect.width >= g_PlayableArea.width) || (g_Levels[2].enemies[i].rect.x <= g_PlayableArea.x)) {
+            g_Levels[2].enemies[i].speedX = g_Levels[2].enemies[i].speedX * (-1);
+        }
+        if ((g_Levels[2].enemies[i].rect.y + g_Levels[2].enemies[i].rect.height >= g_PlayableArea.height) || (g_Levels[2].enemies[i].rect.y <= g_PlayableArea.y)) {
+            g_Levels[2].enemies[i].speedY = g_Levels[2].enemies[i].speedY * (-1);
+        }
+
+        //collision checking should also probably not be in rendering
+        if (IsColliding(g_MainPlayer.rect, g_Levels[2].enemies[i].rect) == TRUE) {
+            playerCollided = TRUE;
+            timesDied++;
+            PlayGameSound(&g_PlayerHitSound);
+        }
+        //Drawing enemy
+        DrawBitmapInPlayableArea(&g_Levels[2].enemies[i].sprite, g_Levels[2].enemies[i].rect.x, g_Levels[2].enemies[i].rect.y);
+
+        //Adding the enemy speed to the enemy's position
+        g_Levels[2].enemies[i].rect.x = g_Levels[2].enemies[i].rect.x + g_Levels[2].enemies[i].speedX;
+        g_Levels[2].enemies[i].rect.y = g_Levels[2].enemies[i].rect.y + g_Levels[2].enemies[i].speedY;
+    }
+
+
+    //Reloading the level in case the player collides with an enemy
+    if (playerCollided == TRUE && timesDied < g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[2].enemies, g_Levels[2].enemyCount);
+        g_Timer = 0;
+    }
+    //Checking to see if the player has any tries left
+    else if (timesDied >= g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[2].enemies, g_Levels[2].enemyCount);
+        timesDied = 0;
+        g_LastLevelState = GS_LEVEL3;
+        g_LastGameState = GS_LEVEL3;
+        g_GameState = GS_TRANSITION;
+        PlayGameSound(&g_PlayerDeath);
+    }
+
+    //Drawing Header Rectangle
+    DrawRectangle((RECTANGLE) { 0, GAME_HEIGHT - 15, GAME_WIDTH, 15 }, (COLOR) { 0x0 });
+
+    //Drawing the player's tries left
+    char playerTriesLeftString[20];
+    COLOR playerTriesLeftStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(playerTriesLeftString, _countof(playerTriesLeftString), "Tries Left: %i", (int32_t)(g_MainPlayer.tries - timesDied));
+    DrawString(playerTriesLeftString, &g_Font, 5, GAME_HEIGHT - 10, playerTriesLeftStringColor);
+
+    //Drawing Current Timer
+    char timerString[20];
+    COLOR timerStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
+    DrawString(timerString, &g_Font, GAME_WIDTH / 2 - 30, GAME_HEIGHT - 10, timerStringColor);
+
+    //Drawing "Main Menu: Esc"
+    char pauseString[15];
+    COLOR pauseStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(pauseString, _countof(pauseString), "Main Menu: Esc");
+    DrawString(pauseString, &g_Font, GAME_WIDTH - 82, GAME_HEIGHT - 10, pauseStringColor);
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+    }
+#endif
+}
+
+void DrawLevel4(void) {
+    static int8_t timesDied = 0;
+
+    //Drawing Background
+    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+
+    //Drawing main player
+    DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
+
+    //Check if the player survived enough time already, before checking for collisions (hard coded for now)
+    if (g_Timer / 1000000 >= g_Levels[3].timeMax) {
+        g_LastLevelState = GS_LEVEL4;
+        g_LastGameState = GS_LEVEL4;
+        g_GameState = GS_TRANSITION;
+        return;
+    }
+
+    //Drawing Enemies
+    BOOL playerCollided = FALSE;
+    for (uint32_t i = 0; i < g_Levels[3].enemyCount; i++)
+    {
+        //Checking if they're colliding with the "walls" of the window
+        if ((g_Levels[3].enemies[i].rect.x + g_Levels[3].enemies[i].rect.width >= g_PlayableArea.width) || (g_Levels[3].enemies[i].rect.x <= g_PlayableArea.x)) {
+            g_Levels[3].enemies[i].speedX = g_Levels[3].enemies[i].speedX * (-1);
+        }
+        if ((g_Levels[3].enemies[i].rect.y + g_Levels[3].enemies[i].rect.height >= g_PlayableArea.height) || (g_Levels[3].enemies[i].rect.y <= g_PlayableArea.y)) {
+            g_Levels[3].enemies[i].speedY = g_Levels[3].enemies[i].speedY * (-1);
+        }
+
+        //collision checking should also probably not be in rendering
+        if (IsColliding(g_MainPlayer.rect, g_Levels[3].enemies[i].rect) == TRUE) {
+            playerCollided = TRUE;
+            timesDied++;
+            PlayGameSound(&g_PlayerHitSound);
+        }
+        //Drawing enemy
+        DrawBitmapInPlayableArea(&g_Levels[3].enemies[i].sprite, g_Levels[3].enemies[i].rect.x, g_Levels[3].enemies[i].rect.y);
+
+        //Adding the enemy speed to the enemy's position
+        g_Levels[3].enemies[i].rect.x = g_Levels[3].enemies[i].rect.x + g_Levels[3].enemies[i].speedX;
+        g_Levels[3].enemies[i].rect.y = g_Levels[3].enemies[i].rect.y + g_Levels[3].enemies[i].speedY;
+    }
+
+
+    //Reloading the level in case the player collides with an enemy
+    if (playerCollided == TRUE && timesDied < g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[3].enemies, g_Levels[3].enemyCount);
+        g_Timer = 0;
+    }
+    //Checking to see if the player has any tries left
+    else if (timesDied >= g_MainPlayer.tries) {
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[3].enemies, g_Levels[3].enemyCount);
+        timesDied = 0;
+        g_LastLevelState = GS_LEVEL4;
+        g_LastGameState = GS_LEVEL4;
+        g_GameState = GS_TRANSITION;
+        PlayGameSound(&g_PlayerDeath);
+    }
+
+    //Drawing Header Rectangle
+    DrawRectangle((RECTANGLE) { 0, GAME_HEIGHT - 15, GAME_WIDTH, 15 }, (COLOR) { 0x0 });
+
+    //Drawing the player's tries left
+    char playerTriesLeftString[20];
+    COLOR playerTriesLeftStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(playerTriesLeftString, _countof(playerTriesLeftString), "Tries Left: %i", (int32_t)(g_MainPlayer.tries - timesDied));
+    DrawString(playerTriesLeftString, &g_Font, 5, GAME_HEIGHT - 10, playerTriesLeftStringColor);
+
+    //Drawing Current Timer
+    char timerString[20];
+    COLOR timerStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(timerString, _countof(timerString), "TIME: %llu s", g_Timer / 1000000);
+    DrawString(timerString, &g_Font, GAME_WIDTH / 2 - 30, GAME_HEIGHT - 10, timerStringColor);
+
+    //Drawing "Main Menu: Esc"
+    char pauseString[15];
+    COLOR pauseStringColor = { 0xFF, 0xFF, 0xFF };
+    sprintf_s(pauseString, _countof(pauseString), "Main Menu: Esc");
+    DrawString(pauseString, &g_Font, GAME_WIDTH - 82, GAME_HEIGHT - 10, pauseStringColor);
+
+#ifdef _DEBUG
+    //Drawing debug code
+    if (g_PerformanceData.displayDebugInfo == TRUE) {
+        char debugString[200];
+        COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+        //Render debug data
+        sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+        sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+        DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
     }
 #endif
 }
@@ -1487,12 +1844,55 @@ void DrawTransition(void) {
         switch (g_LastGameState) {
             case GS_MENU: {
                 g_LastGameState = GS_TRANSITION;
-                g_GameState = GS_LEVEL;
+                g_GameState = GS_LEVELNOTPLAYABLE;
                 break;
             }
-            case GS_LEVEL: {
-                g_LastGameState = GS_TRANSITION;
-                g_GameState = GS_GAMEOVER;
+            case GS_LEVEL1: {
+                if (g_Timer / 1000000 >= g_Levels[0].timeMax) {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_LEVEL2;
+                    g_Timer = 0;
+                }
+                else {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_GAMEOVER;
+                }
+                break;
+            }
+            case GS_LEVEL2: {
+                if (g_Timer / 1000000 >= g_Levels[1].timeMax) {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_LEVEL3;
+                    g_Timer = 0;
+                }
+                else {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_GAMEOVER;
+                }
+                break;
+            }
+            case GS_LEVEL3: {
+                if (g_Timer / 1000000 >= g_Levels[2].timeMax) {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_LEVEL4;
+                    g_Timer = 0;
+                }
+                else {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_GAMEOVER;
+                }
+                break;
+            }
+            case GS_LEVEL4: {
+                if (g_Timer / 1000000 >= g_Levels[3].timeMax) {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_MENU;
+                    g_Timer = 0;
+                }
+                else {
+                    g_LastGameState = GS_TRANSITION;
+                    g_GameState = GS_GAMEOVER;
+                }
                 break;
             }
             case GS_CONTROLS: {
@@ -1502,6 +1902,9 @@ void DrawTransition(void) {
                 break;
             }
             case GS_TRANSITION: {
+                break;
+            }
+            case GS_LEVELNOTPLAYABLE: {
                 break;
             }
             case GS_NOSTATE: {
@@ -1537,6 +1940,42 @@ void DrawTransition(void) {
 #endif
 }
 
+void DrawLevelNotPlayable(void) {
+    static uint64_t localFrameCount = 0;
+    
+    if (localFrameCount > 5 * TARGET_FPS) {
+        g_LastGameState = GS_LEVELNOTPLAYABLE;
+        g_GameState = GS_LEVEL1;
+    }
+    else {
+        //Drawing Background
+        DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+
+        //Drawing Message
+        DrawString("DON'T LET THE BEES TOUCH YOU FOR 15 SECONDS", &g_Font, GAME_WIDTH/2 - 129, GAME_HEIGHT / 2, (COLOR) { 0 });
+
+#ifdef _DEBUG
+        //Drawing debug code
+        if (g_PerformanceData.displayDebugInfo == TRUE) {
+            char debugString[200];
+            COLOR debugStringColor = { 0xff, 0xff, 0xff };
+
+            //Render debug data
+            sprintf_s(debugString, _countof(debugString), "RAW FPS: %u", g_PerformanceData.rawFPS);
+            DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 25, debugStringColor);
+
+            sprintf_s(debugString, _countof(debugString), "VIRTUAL FPS: %u", g_PerformanceData.virtualFPS);
+            DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 35, debugStringColor);
+
+            sprintf_s(debugString, _countof(debugString), "MEMORY USAGE: %llu KB", g_PerformanceData.memoryInfo.PrivateUsage / 1024);
+            DrawString(debugString, &g_Font, 1, GAME_HEIGHT - 55, debugStringColor);
+        }
+#endif
+    }
+
+    localFrameCount++;
+}
+
 PIXEL InitializePixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
     PIXEL pixel = { 0 };
 
@@ -1552,7 +1991,7 @@ void InitializeMainPlayer(void) {
     COLOR playerColor = { .red = 0xFF, .green = 0x1F, .blue = 0x1F };
     g_MainPlayer.color = playerColor;
     g_MainPlayer.rect.x = GAME_WIDTH / 2;
-    g_MainPlayer.rect.y = 75;
+    g_MainPlayer.rect.y = 50;
     g_MainPlayer.speedX = 2;
     g_MainPlayer.speedY = 2;
     g_MainPlayer.rect.width = 16;
@@ -1560,7 +1999,7 @@ void InitializeMainPlayer(void) {
     g_MainPlayer.tries = 3;
 }
 
-void InitializeEnemies(void) {
+void InitializeEnemies(ENEMY enemyList[], uint8_t enemyCount) {
     COLOR enemyColor = { .red = 0x13, .green = 0x16, .blue = 0xff };
 
     float speedScale = 0.75f;
@@ -1569,15 +2008,15 @@ void InitializeEnemies(void) {
     float spawnRegionPositionX = (g_PlayableArea.x + GAME_WIDTH - spawnRegionWidth) / 2;
     float spawnRegionPositionY = GAME_HEIGHT - 110;
 
-    for (uint32_t i = 0; i < ENEMY_COUNT; i++)
+    for (uint32_t i = 0; i < enemyCount; i++)
     {
-        g_Enemies[i].color = enemyColor;
-        g_Enemies[i].rect.x = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
-        g_Enemies[i].rect.y = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
-        g_Enemies[i].rect.width = 16;
-        g_Enemies[i].rect.height = 16;
-        g_Enemies[i].speedX = RandomUInt32InRange(2, 5) * speedScale * RandomSign();
-        g_Enemies[i].speedY = RandomUInt32InRange(2, 5) * speedScale * RandomSign();
+        enemyList[i].color = enemyColor;
+        enemyList[i].rect.x = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionX, (uint32_t)(spawnRegionPositionX + spawnRegionWidth));
+        enemyList[i].rect.y = (float)RandomUInt32InRange((uint32_t)spawnRegionPositionY, (uint32_t)(spawnRegionPositionY + spawnRegionHeight));
+        enemyList[i].rect.width = 16;
+        enemyList[i].rect.height = 16;
+        enemyList[i].speedX = RandomUInt32InRange(2, 5) * speedScale * RandomSign();
+        enemyList[i].speedY = RandomUInt32InRange(2, 5) * speedScale * RandomSign();
     }
 }
 
@@ -1635,6 +2074,20 @@ HRESULT InitializeSoundEngine(void) {
 
 Exit:
     return returnValue;
+}
+
+void InitializeLevels(void) {
+    InitializeMainPlayer();
+
+    uint8_t levelEnemyCount[LEVEL_COUNT] = {5, 8, 10, 12};
+
+    for (uint8_t i = 0; i < LEVEL_COUNT; i++)
+    {
+        g_Levels[i].enemyCount = levelEnemyCount[i];
+        InitializeEnemies(g_Levels[i].enemies, g_Levels[i].enemyCount);
+        g_Levels[i].background = &g_LevelBackground;
+        g_Levels[i].timeMax = 15;
+    }
 }
 
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest) {
@@ -1893,7 +2346,12 @@ DWORD LoadAssets(void) {
         LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
         LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
         LoadBitmapFromFile("..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
-        for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+        for (uint16_t i = 0; i < LEVEL_COUNT; i++) {
+            for (uint16_t j = 0; j < g_Levels[i].enemyCount; j++)
+            {
+                LoadBitmapFromFile("..\\assets\\bee_16x16.bmp", &g_Levels[i].enemies[j].sprite);
+            }
+        }
     }
     else {
         //Loading all sounds
@@ -1911,7 +2369,12 @@ DWORD LoadAssets(void) {
         LoadBitmapFromFile("..\\..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
         LoadBitmapFromFile("..\\..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
         LoadBitmapFromFile("..\\..\\assets\\flower_16x16.bmp", &g_MainPlayer.sprite);
-        for (uint16_t i = 0; i < ENEMY_COUNT; i++) LoadBitmapFromFile("..\\..\\assets\\bee_16x16.bmp", &g_Enemies[i].sprite);
+        for (uint16_t i = 0; i < LEVEL_COUNT; i++) {
+            for (uint16_t j = 0; j < g_Levels[i].enemyCount; j++)
+            {
+                LoadBitmapFromFile("..\\..\\assets\\bee_16x16.bmp", &g_Levels[i].enemies[j].sprite);
+            }
+        }
     }
     
 
@@ -1932,7 +2395,11 @@ void PlayGameSound(GAMESOUND* gameSound) {
         }
     }
     else if (gameSound->waveFormat.nChannels == 2) {
-        //Stereo sound (probably a song)
+        //Stop the song that is currently playing
+        g_MusicSourceVoice->lpVtbl->Stop(g_MusicSourceVoice, 0, 0);
+        g_MusicSourceVoice->lpVtbl->FlushSourceBuffers(g_MusicSourceVoice);
+        //Make it loop
+        gameSound->buffer.LoopCount = XAUDIO2_LOOP_INFINITE;
         g_MusicSourceVoice->lpVtbl->SubmitSourceBuffer(g_MusicSourceVoice, &gameSound->buffer, NULL);
         g_MusicSourceVoice->lpVtbl->Start(g_MusicSourceVoice, 0, XAUDIO2_COMMIT_NOW);
     }
@@ -2004,7 +2471,7 @@ void ControlsBackButtonAction(void) {
 
 void TryAgainGameOverButtonAction(void) {
     g_LastGameState = GS_GAMEOVER;
-    g_GameState = GS_LEVEL;
+    g_GameState = g_LastLevelState;
 }
 
 void MainMenuGameOverButtonAction(void) {

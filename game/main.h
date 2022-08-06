@@ -14,6 +14,7 @@
 #define GAME_BACKBUFFER_SIZE		(GAME_WIDTH * GAME_HEIGHT * BYTES_PER_PIXEL)			//In bytes
 
 #define TARGET_MICSECS_PER_FRAME	16667
+#define TARGET_FPS					(1000000 / TARGET_MICSECS_PER_FRAME)
 
 #define FRAME_INTERVAL				5														//For debugging display only really
 
@@ -21,7 +22,9 @@
 
 #define _SIMD
 
-#define ENEMY_COUNT					15
+#define ENEMY_MAX_COUNT				20
+#define ENEMY_COUNT					5
+#define LEVEL_COUNT					4
 
 #define FONT_SHEET_CHARACTER_WIDTH	98
 
@@ -83,6 +86,8 @@ typedef struct COLOR {
 
 //Not recommended to add or take stuff from here, because we're using pointer conversions (PIXEL*)
 //PIXEL LAYOUT => BB GG RR AA (from bitmaps)
+//We shouldn't define a pixel like this, this is pretty much a color in RGBA form, that's it. A pixel has much more
+//		information like color and position in the monitor.
 typedef struct PIXEL {
 	COLOR color;
 	uint8_t alpha;
@@ -133,22 +138,37 @@ typedef struct MENU {
 
 typedef enum GAMESTATE {
 	GS_MENU,
-	GS_LEVEL,
+	GS_LEVEL1,
+	GS_LEVEL2,
+	GS_LEVEL3,
+	GS_LEVEL4,
 	GS_CONTROLS,
 	GS_GAMEOVER,
 	GS_TRANSITION,
+	GS_LEVELNOTPLAYABLE,
 	GS_NOSTATE
 } GAMESTATE;
+
+typedef struct LEVEL {
+	ENEMY enemies[ENEMY_MAX_COUNT];
+	uint8_t enemyCount;
+	uint8_t timeMax;
+	BACKGROUND* background;
+} LEVEL;
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);							//Responder of window messages
 HWND CreateMainWindow(const char* windowTitle, RECTANGLE windowRect);
 BOOL GameIsRunning(void);																										//Function to prevent multiples instances of this same program running simutaneasly
 void ProcessInput(void);
 void ProcessInputMenu(void);
-void ProcessInputLevel(void);
+void ProcessInputLevel1(void);
+void ProcessInputLevel2(void);
+void ProcessInputLevel3(void);
+void ProcessInputLevel4(void);
 void ProcessInputControls(void);
 void ProcessInputGameOver(void);
 void ProcessInputTransition(void);
+void ProcessInputLevelNotPlayable(void);
 void RenderGraphics(HWND windowHandle);
 void DrawBackground(COLOR color);
 void DrawRectangle(RECTANGLE rect, COLOR color);
@@ -157,13 +177,18 @@ void DrawBitmap(GAMEBITMAP* bitmap, float minX, float minY);
 void DrawBitmapInPlayableArea(GAMEBITMAP* bitmap, float minX, float minY);
 void DrawString(int8_t* string, GAMEBITMAP* bitmap, float minX, float minY, COLOR color);
 void DrawMenu(void);
-void DrawLevel(void);
+void DrawLevel1(void);
+void DrawLevel2(void);
+void DrawLevel3(void);
+void DrawLevel4(void);
 void DrawControls(void);
 void DrawGameOver(void);
 void DrawTransition(void);
+void DrawLevelNotPlayable(void);
 PIXEL InitializePixel(uint8_t blue, uint8_t green, uint8_t red, uint8_t alpha);
 void InitializeMainPlayer(void);
-void InitializeEnemies(void);
+void InitializeEnemies(ENEMY enemyList[], uint8_t enemyCount);
+void InitializeLevels(void);
 HRESULT InitializeSoundEngine(void);
 DWORD LoadBitmapFromFile(const char* filename, GAMEBITMAP* dest);
 DWORD LoadWavFromFile(const char* filename, GAMESOUND* dest);
