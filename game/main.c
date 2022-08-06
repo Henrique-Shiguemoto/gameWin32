@@ -13,9 +13,12 @@ GAMESTATE g_LastGameState = GS_NOSTATE;
 GAMESTATE g_LastLevelState = GS_NOSTATE;
 BOOL g_GameIsFocused = TRUE;
 GAMEBITMAP g_GameBackbuffer = { 0 };
+GAMEBITMAP g_Level1Background = { 0 };
+GAMEBITMAP g_Level2Background = { 0 };
+GAMEBITMAP g_Level3Background = { 0 };
+GAMEBITMAP g_Level4Background = { 0 };
 GAME_PERFORMANCE_DATA g_PerformanceData = { 0 };
 PLAYER g_MainPlayer = { 0 };
-BACKGROUND g_LevelBackground = { 0 };
 GAMEBITMAP g_Font = { 0 };
 uint64_t g_Timer = 0;
 RECTANGLE g_PlayableArea = { 0.0, 0.0, GAME_WIDTH, GAME_HEIGHT - 15};
@@ -114,13 +117,12 @@ int32_t WinMain(HINSTANCE currentInstanceHandle, HINSTANCE previousInstanceHandl
         returnValue = EXIT_FAILURE;
         goto Exit;
     }
-    g_LevelBackground.rect = g_PlayableArea;
 
     //Initialize Levels (this includes main player and enemies initialization)
     InitializeLevels();
     
     //We need to initialize the levels before loading assets
-    LoadAssets();    
+    LoadAssets();
 
     //Frame Processing
     float timeElapsedInMicroseconds = 0;
@@ -1349,7 +1351,7 @@ void DrawLevel1(void) {
     static int8_t timesDied = 0;
 
     //Drawing Background
-    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+    DrawBitmapInPlayableArea(&g_Levels[0].background.background, g_Levels[0].background.rect.x, g_Levels[0].background.rect.y);
 
     //Drawing main player
     DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
@@ -1450,7 +1452,7 @@ void DrawLevel2(void) {
     static int8_t timesDied = 0;
 
     //Drawing Background
-    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+    DrawBitmapInPlayableArea(&g_Levels[1].background.background, g_Levels[1].background.rect.x, g_Levels[1].background.rect.y);
 
     //Drawing main player
     DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
@@ -1551,7 +1553,7 @@ void DrawLevel3(void) {
     static int8_t timesDied = 0;
 
     //Drawing Background
-    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+    DrawBitmapInPlayableArea(&g_Levels[2].background.background, g_Levels[2].background.rect.x, g_Levels[2].background.rect.y);
 
     //Drawing main player
     DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
@@ -1652,7 +1654,7 @@ void DrawLevel4(void) {
     static int8_t timesDied = 0;
 
     //Drawing Background
-    DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
+    DrawBitmapInPlayableArea(&g_Levels[3].background.background, g_Levels[3].background.rect.x, g_Levels[3].background.rect.y);
 
     //Drawing main player
     DrawBitmapInPlayableArea(&g_MainPlayer.sprite, (uint16_t)g_MainPlayer.rect.x, (uint16_t)g_MainPlayer.rect.y);
@@ -1949,10 +1951,10 @@ void DrawLevelNotPlayable(void) {
     }
     else {
         //Drawing Background
-        DrawBitmapInPlayableArea(&g_LevelBackground.background, g_LevelBackground.rect.x, g_LevelBackground.rect.y);
-
+        DrawBackground((COLOR) {0});
+        
         //Drawing Message
-        DrawString("DON'T LET THE BEES TOUCH YOU FOR 15 SECONDS", &g_Font, GAME_WIDTH/2 - 129, GAME_HEIGHT / 2, (COLOR) { 0 });
+        DrawString("DON'T LET THE BEES TOUCH YOU FOR 15 SECONDS", &g_Font, GAME_WIDTH/2 - 129, GAME_HEIGHT / 2, (COLOR) { 0xFF, 0xFF, 0xFF });
 
 #ifdef _DEBUG
         //Drawing debug code
@@ -2085,7 +2087,6 @@ void InitializeLevels(void) {
     {
         g_Levels[i].enemyCount = levelEnemyCount[i];
         InitializeEnemies(g_Levels[i].enemies, g_Levels[i].enemyCount);
-        g_Levels[i].background = &g_LevelBackground;
         g_Levels[i].timeMax = 15;
     }
 }
@@ -2341,7 +2342,18 @@ DWORD LoadAssets(void) {
 
         //Loading all bitmaps
         LoadBitmapFromFile("..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
-        LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
+        LoadBitmapFromFile("..\\assets\\background_640x360.bmp", &g_Level1Background);
+        LoadBitmapFromFile("..\\assets\\background2_640x360.bmp", &g_Level2Background);
+        LoadBitmapFromFile("..\\assets\\background3_640x360.bmp", &g_Level3Background);
+        LoadBitmapFromFile("..\\assets\\background4_640x360.bmp", &g_Level4Background);
+        g_Levels[0].background.background = g_Level1Background;
+        g_Levels[1].background.background = g_Level2Background;
+        g_Levels[2].background.background = g_Level3Background;
+        g_Levels[3].background.background = g_Level4Background;
+        g_Levels[0].background.rect = g_PlayableArea;
+        g_Levels[1].background.rect = g_PlayableArea;
+        g_Levels[2].background.rect = g_PlayableArea;
+        g_Levels[3].background.rect = g_PlayableArea;
         LoadBitmapFromFile("..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
         LoadBitmapFromFile("..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
         LoadBitmapFromFile("..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
@@ -2364,7 +2376,18 @@ DWORD LoadAssets(void) {
 
         //Loading all bitmaps
         LoadBitmapFromFile("..\\..\\assets\\background_640x360_ofuscated.bmp", &g_MenuBackground.background);
-        LoadBitmapFromFile("..\\..\\assets\\background_640x360.bmp", &g_LevelBackground.background);
+        LoadBitmapFromFile("..\\..\\assets\\background_640x360.bmp", &g_Level1Background);
+        LoadBitmapFromFile("..\\..\\assets\\background2_640x360.bmp", &g_Level2Background);
+        LoadBitmapFromFile("..\\..\\assets\\background3_640x360.bmp", &g_Level3Background);
+        LoadBitmapFromFile("..\\..\\assets\\background4_640x360.bmp", &g_Level4Background);
+        g_Levels[0].background.background = g_Level1Background;
+        g_Levels[1].background.background = g_Level2Background;
+        g_Levels[2].background.background = g_Level3Background;
+        g_Levels[3].background.background = g_Level4Background;
+        g_Levels[0].background.rect = g_PlayableArea;
+        g_Levels[1].background.rect = g_PlayableArea;
+        g_Levels[2].background.rect = g_PlayableArea;
+        g_Levels[3].background.rect = g_PlayableArea;
         LoadBitmapFromFile("..\\..\\assets\\flower_64x64.bmp", &g_MenuFlowerBitmap);
         LoadBitmapFromFile("..\\..\\assets\\bee_64x64.bmp", &g_MenuBeeBitmap);
         LoadBitmapFromFile("..\\..\\assets\\6x7Font.bmp", &g_Font); //This font is from Ryan Ries. His youtube channel: https://www.youtube.com/user/ryanries09
@@ -2377,7 +2400,6 @@ DWORD LoadAssets(void) {
         }
     }
     
-
 Exit:
 
     return returnValue;

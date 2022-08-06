@@ -153,7 +153,7 @@ typedef struct LEVEL {
 	ENEMY enemies[ENEMY_MAX_COUNT];
 	uint8_t enemyCount;
 	uint8_t timeMax;
-	BACKGROUND* background;
+	BACKGROUND background;
 } LEVEL;
 
 LRESULT CALLBACK MainWndProc(HWND windowHandle, UINT messageID, WPARAM wParameter, LPARAM lParameter);							//Responder of window messages
