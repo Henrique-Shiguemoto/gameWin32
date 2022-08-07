@@ -1361,6 +1361,8 @@ void DrawLevel1(void) {
         g_LastLevelState = GS_LEVEL1;
         g_LastGameState = GS_LEVEL1;
         g_GameState = GS_TRANSITION;
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[1].enemies, g_Levels[1].enemyCount);
         return;
     }
 
@@ -1462,6 +1464,8 @@ void DrawLevel2(void) {
         g_LastLevelState = GS_LEVEL2;
         g_LastGameState = GS_LEVEL2;
         g_GameState = GS_TRANSITION;
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[2].enemies, g_Levels[2].enemyCount);
         return;
     }
 
@@ -1563,6 +1567,8 @@ void DrawLevel3(void) {
         g_LastLevelState = GS_LEVEL3;
         g_LastGameState = GS_LEVEL3;
         g_GameState = GS_TRANSITION;
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[3].enemies, g_Levels[3].enemyCount);
         return;
     }
 
@@ -1664,6 +1670,8 @@ void DrawLevel4(void) {
         g_LastLevelState = GS_LEVEL4;
         g_LastGameState = GS_LEVEL4;
         g_GameState = GS_TRANSITION;
+        InitializeMainPlayer();
+        InitializeEnemies(g_Levels[0].enemies, g_Levels[0].enemyCount);
         return;
     }
 
@@ -2494,6 +2502,7 @@ void ControlsBackButtonAction(void) {
 void TryAgainGameOverButtonAction(void) {
     g_LastGameState = GS_GAMEOVER;
     g_GameState = g_LastLevelState;
+    g_Timer = 0;
 }
 
 void MainMenuGameOverButtonAction(void) {
