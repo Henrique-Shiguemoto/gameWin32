@@ -4,11 +4,11 @@ This is a game I wanted to make without the use of game engines. The player cont
 
 A gameplay video is available [here](https://youtu.be/UYTEnszqbYk)
 
-![menu](\readme_imgs\menu.png)
+![menu](/readme_imgs/menu.png)
 
 # How to Run
 
-Double-Click the <code>x64\Debug\game.exe<\code> executable.
+Double-Click the <code>x64\Debug\game.exe</code> executable.
 
 # Technologies Used
 
@@ -22,6 +22,6 @@ Double-Click the <code>x64\Debug\game.exe<\code> executable.
 
 # More Screenshots
 
-![1](\readme_imgs\1.png)
+![1](/readme_imgs/1.png)
 
-![2](\readme_imgs\2.png)
+![2](/readme_imgs/2.png)
