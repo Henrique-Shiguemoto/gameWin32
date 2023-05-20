@@ -1,6 +1,6 @@
 # QuickFlower
 
-This is a game I wanted to make without the use of game engines. The player controls a blue flower and has to avoid the bees that are flying around the screen in a set timer. The font used in this game was made by [Ryan Ries](https://github.com/ryanries). Except the font, all the assets were made by me.
+This is a game I wanted to make without the use of game engines. The player controls a blue flower and has to avoid the bees that are flying around the screen in a set timer. The font used in this game was made by [Ryan Ries](https://github.com/ryanries). Except for the font, all the assets were made by me.
 
 A gameplay video is available [here](https://youtu.be/UYTEnszqbYk)
 
